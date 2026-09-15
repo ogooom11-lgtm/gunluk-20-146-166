@@ -22,7 +22,7 @@ class WrongPasswordException extends SecureDataException {
 
 /// ملف نسخة احتياطية غير صالح أو غير مدعوم.
 class BackupFormatException extends SecureDataException {
-  const BackupFormatException([String key = 'secure.badFile']) : super(key);
+  const BackupFormatException([super.messageKey = 'secure.badFile']);
 }
 
 /// أدوات التشفير المحلية: PBKDF2-HMAC-SHA256 لاشتقاق المفاتيح،

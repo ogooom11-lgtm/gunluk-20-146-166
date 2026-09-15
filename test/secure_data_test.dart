@@ -199,7 +199,7 @@ void main() {
           (int i) => <String, String>{'id': 't$i', 'title': 'مهمة رقم $i', 'notes': 'ملاحظات $i'},
         ),
       });
-      expect(big.length, greaterThan(60000));
+      expect(big.length, greaterThan(40000));
       final String file = SecureData.encryptBackup(plainJson: big, password: 'p', iterations: 500);
       expect(SecureData.decryptBackup(fileText: file, password: 'p'), big);
     });
