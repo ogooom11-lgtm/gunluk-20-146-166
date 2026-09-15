@@ -15,6 +15,9 @@ AppState _freshState() {
 }
 
 void main() {
+  // تهيئة الربط حتى تعمل قنوات المنصة التجريبية (التخزين/الإشعارات) بلا جهاز.
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('الأحداث اليومية', () {
     test('إضافة حدث وحفظه للأبد', () async {
       final AppState app = _freshState();
