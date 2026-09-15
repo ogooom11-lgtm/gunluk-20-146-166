@@ -40,6 +40,12 @@ class AppSettings {
     this.onboarded = false,
     this.focusMinutes = 25,
     this.breakMinutes = 5,
+    this.lockEnabled = false,
+    this.lockHash = '',
+    this.lockWhenBackground = true,
+    this.lockGraceSeconds = 30,
+    this.secureScreen = false,
+    this.encryptBackupsByDefault = true,
     this.lastExport,
     this.createdAt,
   }) : workDays = workDays ?? <int>{DateTime.sunday, DateTime.monday, DateTime.tuesday, DateTime.wednesday, DateTime.thursday};
@@ -90,6 +96,12 @@ class AppSettings {
       onboarded: json['ob'] == true,
       focusMinutes: (json['fm'] as num?)?.toInt() ?? 25,
       breakMinutes: (json['bm'] as num?)?.toInt() ?? 5,
+      lockEnabled: json['lk'] == true,
+      lockHash: (json['lh'] ?? '').toString(),
+      lockWhenBackground: json['lb'] != false,
+      lockGraceSeconds: (json['lg2'] as num?)?.toInt() ?? 30,
+      secureScreen: json['ss'] == true,
+      encryptBackupsByDefault: json['eb'] != false,
       lastExport: json['lx'] != null ? DateTime.tryParse(json['lx'].toString()) : null,
       createdAt: json['cr'] != null ? DateTime.tryParse(json['cr'].toString()) : null,
     );
@@ -144,6 +156,26 @@ class AppSettings {
   bool onboarded;
   int focusMinutes;
   int breakMinutes;
+
+  // ===== الأمان =====
+  /// قفل التطبيق بكلمة سر.
+  bool lockEnabled;
+
+  /// بصمة كلمة السر (PBKDF2-HMAC-SHA256) — لا تُخزَّن كلمة السر نفسها أبدًا.
+  String lockHash;
+
+  /// القفل تلقائيًا عند مغادرة التطبيق.
+  bool lockWhenBackground;
+
+  /// مهلة السماح قبل القفل بعد العودة للتطبيق (ثوانٍ).
+  int lockGraceSeconds;
+
+  /// منع التقاط الشاشة وإظهار المحتوى في مبدّل التطبيقات.
+  bool secureScreen;
+
+  /// تشفير النسخ الاحتياطية بكلمة سر افتراضيًا.
+  bool encryptBackupsByDefault;
+
   DateTime? lastExport;
   DateTime? createdAt;
 
@@ -194,6 +226,12 @@ class AppSettings {
     bool? onboarded,
     int? focusMinutes,
     int? breakMinutes,
+    bool? lockEnabled,
+    String? lockHash,
+    bool? lockWhenBackground,
+    int? lockGraceSeconds,
+    bool? secureScreen,
+    bool? encryptBackupsByDefault,
     DateTime? lastExport,
     DateTime? createdAt,
   }) =>
@@ -235,6 +273,12 @@ class AppSettings {
         onboarded: onboarded ?? this.onboarded,
         focusMinutes: focusMinutes ?? this.focusMinutes,
         breakMinutes: breakMinutes ?? this.breakMinutes,
+        lockEnabled: lockEnabled ?? this.lockEnabled,
+        lockHash: lockHash ?? this.lockHash,
+        lockWhenBackground: lockWhenBackground ?? this.lockWhenBackground,
+        lockGraceSeconds: lockGraceSeconds ?? this.lockGraceSeconds,
+        secureScreen: secureScreen ?? this.secureScreen,
+        encryptBackupsByDefault: encryptBackupsByDefault ?? this.encryptBackupsByDefault,
         lastExport: lastExport ?? this.lastExport,
         createdAt: createdAt ?? this.createdAt,
       );
@@ -277,6 +321,12 @@ class AppSettings {
         'ob': onboarded,
         'fm': focusMinutes,
         'bm': breakMinutes,
+        'lk': lockEnabled,
+        'lh': lockHash,
+        'lb': lockWhenBackground,
+        'lg2': lockGraceSeconds,
+        'ss': secureScreen,
+        'eb': encryptBackupsByDefault,
         'lx': lastExport?.toIso8601String(),
         'cr': createdAt?.toIso8601String(),
       };

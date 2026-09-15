@@ -57,7 +57,9 @@ class _InjaziAppState extends State<InjaziApp> with WidgetsBindingObserver {
       // استقبال أي عمليات نُفّذت من أزرار الإشعارات أثناء إغلاق التطبيق
       widget.state.refreshFromStorage();
       widget.state.rebuildReminders(immediate: true);
-    } else if (state == AppLifecycleState.paused) {
+      widget.state.handleResumed();
+    } else if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
+      widget.state.handleBackgrounded();
       widget.state.flush();
     }
   }

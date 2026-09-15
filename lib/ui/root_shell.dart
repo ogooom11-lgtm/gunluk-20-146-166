@@ -9,6 +9,8 @@ import '../services/notification_service.dart';
 import 'app_scope.dart';
 import 'screens/calendar_screen.dart';
 import 'screens/dashboard_screen.dart';
+import 'screens/events_screen.dart';
+import 'screens/lock_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/plans_screen.dart';
 import 'screens/reports_screen.dart';
@@ -16,6 +18,7 @@ import 'screens/settings_screen.dart';
 import 'screens/splash_screen.dart';
 import 'screens/task_details_sheet.dart';
 import 'widgets/confetti.dart';
+import 'widgets/event_editor_sheet.dart';
 import 'widgets/quick_add_sheet.dart';
 
 /// الهيكل الجذري: شاشات التطبيق الخمس + زر الإضافة + التنبيهات.
@@ -101,6 +104,8 @@ class _RootShellState extends State<RootShell> {
   Widget build(BuildContext context) {
     final AppState app = context.app;
     if (!app.ready) return const SplashScreen();
+    // القفل أولًا: لا يظهر أي محتوى قبل إدخال كلمة السر.
+    if (app.lockEnabled && app.locked) return const LockScreen();
     if (!app.settings.onboarded) return const OnboardingScreen();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -115,6 +120,7 @@ class _RootShellState extends State<RootShell> {
         });
       }),
       CalendarScreen(selectedDay: _selectedDay, onDayChanged: (DateTime day) => setState(() => _selectedDay = day)),
+      const EventsScreen(),
       const PlansScreen(),
       const ReportsScreen(),
       const SettingsScreen(),
@@ -131,7 +137,14 @@ class _RootShellState extends State<RootShell> {
       floatingActionButton: GestureDetector(
         onLongPress: () => showQuickAddSheet(context, day: Dates.today(), fullEditor: true),
         child: FloatingActionButton(
-          onPressed: () => showQuickAddSheet(context, day: _index == 1 ? _selectedDay : Dates.today()),
+          onPressed: () {
+            // على تبويب الأحداث يُضيف حدثًا، وفي بقية التبويبات يُضيف مهمة سريعة.
+            if (_index == 2) {
+              showEventEditorSheet(context, day: _selectedDay);
+              return;
+            }
+            showQuickAddSheet(context, day: _index == 1 ? _selectedDay : Dates.today());
+          },
           tooltip: context.tr('home.quickAdd'),
           child: const Icon(Icons.add_rounded, size: 30),
         ),
@@ -149,6 +162,11 @@ class _RootShellState extends State<RootShell> {
             icon: const Icon(Icons.calendar_month_outlined),
             selectedIcon: const Icon(Icons.calendar_month_rounded),
             label: context.tr('nav.calendar'),
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.event_note_outlined),
+            selectedIcon: const Icon(Icons.event_note_rounded),
+            label: context.tr('nav.events'),
           ),
           NavigationDestination(
             icon: const Icon(Icons.repeat_outlined),

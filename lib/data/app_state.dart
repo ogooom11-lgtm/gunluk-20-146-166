@@ -7,6 +7,7 @@ import '../core/enums.dart';
 import '../core/l10n/app_strings.dart';
 import '../core/l10n/date_names.dart';
 import '../core/models/app_settings.dart';
+import '../core/models/day_event.dart';
 import '../core/models/day_note.dart';
 import '../core/models/plan.dart';
 import '../core/models/planned_reminder.dart';
@@ -15,6 +16,9 @@ import '../core/models/subtask.dart';
 import '../core/models/task.dart';
 import '../core/utils/dates.dart';
 import '../core/utils/ids.dart';
+import '../core/utils/secure_data.dart';
+import '../services/backup_service.dart';
+import '../services/file_service.dart';
 import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
 import 'app_repository.dart';
@@ -23,9 +27,15 @@ import 'reminder_planner.dart';
 
 /// حالة التطبيق المركزية: البيانات، الإحصاءات، الإشعارات، والتعديلات.
 class AppState extends ChangeNotifier {
-  AppState({AppRepository? repository, NotificationService? notifications})
-      : repo = repository ?? AppRepository(),
+  AppState({
+    AppRepository? repository,
+    NotificationService? notifications,
+    this.useIsolates = true,
+  })  : repo = repository ?? AppRepository(),
         notifications = notifications ?? NotificationService.instance;
+
+  /// تنفيذ مهام التشفير في عزلة منفصلة (يُعطّل في الاختبارات لتبقى متزامنة).
+  final bool useIsolates;
 
   final AppRepository repo;
   final NotificationService notifications;
@@ -37,7 +47,19 @@ class AppState extends ChangeNotifier {
   List<Task> tasks = <Task>[];
   List<Plan> plans = <Plan>[];
   List<DayNote> notes = <DayNote>[];
+
+  /// أحداث اليوم — تُحفظ للأبد ولا تُحذف تلقائيًا.
+  List<DayEvent> events = <DayEvent>[];
   List<FocusSession> sessions = <FocusSession>[];
+
+  /// خدمة الملفات الأصلية (حفظ/اختيار ملف).
+  final FileService files = FileService();
+
+  /// هل التطبيق مقفل الآن بانتظار كلمة السر؟
+  bool locked = false;
+
+  /// وقت آخر انتقال للخلفية (لحساب مهلة السماح).
+  DateTime? _backgroundedAt;
 
   /// الشارات المفتوحة وتاريخ فتحها.
   final Map<String, DateTime> badges = <String, DateTime>{};
@@ -69,8 +91,11 @@ class AppState extends ChangeNotifier {
     await repo.reload();
     await applyPendingOps(silent: true);
     _prune();
+    // قفل التطبيق عند الإقلاع إن كان مفعّلًا.
+    locked = settings.lockEnabled && settings.lockHash.isNotEmpty;
     ready = true;
     notifyListeners();
+    await applySecurityFlags();
     await initNotifications();
     await rebuildReminders(immediate: true);
     await refreshSystemNotificationState();
@@ -98,6 +123,7 @@ class AppState extends ChangeNotifier {
     tasks = AppRepository.mapList(data['tasks']).map(Task.fromJson).toList();
     plans = AppRepository.mapList(data['plans']).map(Plan.fromJson).toList();
     notes = AppRepository.mapList(data['notes']).map(DayNote.fromJson).toList();
+    events = AppRepository.mapList(data['events']).map(DayEvent.fromJson).toList();
     sessions = AppRepository.mapList(data['sessions']).map(FocusSession.fromJson).toList();
     final Map<String, dynamic> badgeMap = AppRepository.map(data['badges']);
     badges.clear();
@@ -120,6 +146,7 @@ class AppState extends ChangeNotifier {
         'tasks': tasks.map((Task t) => t.toJson()).toList(),
         'plans': plans.map((Plan p) => p.toJson()).toList(),
         'notes': notes.map((DayNote n) => n.toJson()).toList(),
+        'events': events.map((DayEvent e) => e.toJson()).toList(),
         'sessions': sessions.map((FocusSession s) => s.toJson()).toList(),
         'badges': badges.map((String key, DateTime v) => MapEntry<String, String>(key, v.toIso8601String())),
         'notifIds': _notifIds,
@@ -762,6 +789,220 @@ class AppState extends ChangeNotifier {
 
   AppLocalizations get l10n => AppLocalizations.ofLocale(Locale(settings.language));
 
+  // ===== الأحداث اليومية =====
+
+  /// أحداث يوم معيّن مرتّبة زمنيًا.
+  List<DayEvent> eventsOn(DateTime day) {
+    final List<DayEvent> out = events.where((DayEvent e) => e.isOn(day)).toList()
+      ..sort(DayEvent.compareInDay);
+    return out;
+  }
+
+  int eventCountOn(DateTime day) => events.where((DayEvent e) => e.isOn(day)).length;
+
+  /// كل الأحداث مرتّبة من الأحدث إلى الأقدم.
+  List<DayEvent> get eventsSorted =>
+      List<DayEvent>.of(events)..sort(DayEvent.compareDesc);
+
+  List<DayEvent> get starredEvents => eventsSorted.where((DayEvent e) => e.starred).toList();
+
+  /// الأحداث القادمة (اليوم وما بعده)، مرتّبة تصاعديًا.
+  List<DayEvent> upcomingEvents({int days = 30}) {
+    final DateTime from = Dates.today();
+    final DateTime to = Dates.addDays(from, days);
+    final List<DayEvent> out = events
+        .where((DayEvent e) => Dates.diffDays(from, e.day) >= 0 && Dates.diffDays(e.day, to) <= 0)
+        .toList()
+      ..sort((DayEvent a, DayEvent b) => DayEvent.compareDesc(b, a));
+    return out;
+  }
+
+  /// الأحداث التي مرّت (قبل اليوم) — للمراجعة والذكريات.
+  List<DayEvent> pastEvents({int days = 30}) {
+    final DateTime today = Dates.today();
+    final DateTime from = Dates.addDays(today, -days);
+    return eventsSorted
+        .where((DayEvent e) => Dates.diffDays(from, e.day) >= 0 && Dates.diffDays(e.day, today) > 0)
+        .toList();
+  }
+
+  /// عدد الأحداث في شهر معيّن (يُعرض في التقويم والتقارير).
+  int eventCountInMonth(DateTime month) => events
+      .where((DayEvent e) => e.day.year == month.year && e.day.month == month.month)
+      .length;
+
+  DayEvent? eventById(String id) {
+    for (final DayEvent e in events) {
+      if (e.id == id) return e;
+    }
+    return null;
+  }
+
+  List<DayEvent> searchEvents(String query) {
+    final String q = query.trim();
+    if (q.isEmpty) return <DayEvent>[];
+    final String needle = q.toLowerCase();
+    return eventsSorted
+        .where((DayEvent e) =>
+            e.title.toLowerCase().contains(needle) ||
+            e.place.toLowerCase().contains(needle) ||
+            e.notes.toLowerCase().contains(needle))
+        .toList();
+  }
+
+  Future<void> upsertEvent(DayEvent event) async {
+    final DayEvent safe = event.id.isEmpty
+        ? DayEvent(
+            id: Ids.next('ev'),
+            title: event.title,
+            day: event.day,
+            minutes: event.minutes,
+            notes: event.notes,
+            place: event.place,
+            categoryId: event.categoryId,
+            iconKey: event.iconKey,
+            starred: event.starred,
+          )
+        : event;
+    final int index = events.indexWhere((DayEvent e) => e.id == safe.id);
+    if (index >= 0) {
+      events[index] = safe;
+    } else {
+      events.add(safe);
+    }
+    markDirty();
+  }
+
+  Future<void> deleteEvent(String id) async {
+    events.removeWhere((DayEvent e) => e.id == id);
+    markDirty();
+  }
+
+  Future<void> toggleEventStar(String id) async {
+    final DayEvent? event = eventById(id);
+    if (event == null) return;
+    event.starred = !event.starred;
+    event.updatedAt = DateTime.now();
+    markDirty();
+  }
+
+  // ===== الأمان: قفل بكلمة سر + منع التقاط الشاشة =====
+
+  bool get lockEnabled => settings.lockEnabled && settings.lockHash.isNotEmpty;
+
+  /// يقفل التطبيق فورًا (يُستدعى من الإعدادات أو عند مغادرة التطبيق).
+  void lockNow() {
+    if (!lockEnabled || locked) return;
+    locked = true;
+    notifyListeners();
+  }
+
+  /// يتحقق من كلمة السر ويفتح التطبيق.
+  Future<bool> unlock(String password) async {
+    if (!lockEnabled) {
+      locked = false;
+      notifyListeners();
+      return true;
+    }
+    final bool ok = SecureData.verifyPassword(password, settings.lockHash);
+    if (ok) {
+      locked = false;
+      notifyListeners();
+    }
+    return ok;
+  }
+
+  /// تفعيل القفل بكلمة سر جديدة.
+  Future<void> setLockPassword(String password) async {
+    final String hash = SecureData.hashPassword(password);
+    await updateSettings(settings.copyWith(lockEnabled: true, lockHash: hash));
+    locked = false;
+    notifyListeners();
+  }
+
+  /// إلغاء القفل نهائيًا (بعد التحقق من كلمة السر الحالية في الواجهة).
+  Future<void> removeLock() async {
+    await updateSettings(settings.copyWith(lockEnabled: false, lockHash: ''));
+    locked = false;
+    notifyListeners();
+  }
+
+  /// عند انتقال التطبيق للخلفية.
+  void handleBackgrounded() {
+    _backgroundedAt = DateTime.now();
+    if (lockEnabled && settings.lockWhenBackground && settings.lockGraceSeconds <= 0) {
+      locked = true;
+    }
+    notifyListeners();
+  }
+
+  /// عند العودة للتطبيق — يقفل إذا انتهت مهلة السماح.
+  void handleResumed() {
+    final DateTime? at = _backgroundedAt;
+    _backgroundedAt = null;
+    if (!lockEnabled) {
+      if (locked) locked = false;
+      notifyListeners();
+      return;
+    }
+    if (at != null && settings.lockWhenBackground) {
+      final int away = DateTime.now().difference(at).inSeconds;
+      if (away >= settings.lockGraceSeconds) locked = true;
+    }
+    notifyListeners();
+  }
+
+  /// يطبّق خيارات الحماية على مستوى النظام (منع التقاط الشاشة).
+  Future<void> applySecurityFlags() => files.setSecureScreen(settings.secureScreen);
+
+  // ===== النسخ الاحتياطي المشفّر =====
+
+  /// يشفّر كل البيانات ويعيد نص الملف الجاهز للحفظ.
+  ///
+  /// يعيد null إذا فشل التشفير (نادر: كلمة سر فارغة).
+  Future<String?> exportEncryptedJson(
+    String password, {
+    int iterations = SecureData.defaultIterations,
+  }) async {
+    final Map<String, dynamic> result = await _runTask(
+      encryptBackupTask,
+      <String, dynamic>{
+        'json': exportJson(),
+        'password': password,
+        'iterations': iterations,
+      },
+    );
+    return result['ok'] == true ? result['data'] as String : null;
+  }
+
+  /// يستورد نسخة احتياطية عادية أو مشفّرة (بكلمة سرها).
+  Future<ImportStatus> importAny(String raw, {String? password}) async {
+    final String text = raw.trim();
+    if (text.isEmpty) return ImportStatus.notBackup;
+    if (!SecureData.looksEncrypted(text)) {
+      final bool ok = await importJson(text);
+      return ok ? ImportStatus.ok : ImportStatus.notBackup;
+    }
+    if (password == null || password.isEmpty) return ImportStatus.wrongPassword;
+    final Map<String, dynamic> result = await _runTask(
+      decryptBackupTask,
+      <String, dynamic>{'file': text, 'password': password},
+    );
+    if (result['ok'] != true) {
+      return importStatusForKey((result['key'] ?? '').toString());
+    }
+    final bool ok = await importJson(result['data'] as String);
+    return ok ? ImportStatus.ok : ImportStatus.badFile;
+  }
+
+  Future<Map<String, dynamic>> _runTask(
+    Map<String, dynamic> Function(Map<String, dynamic>) task,
+    Map<String, dynamic> args,
+  ) async {
+    if (!useIsolates) return task(args);
+    return compute(task, args);
+  }
+
   Future<void> resetAll() async {
     await notifications.cancelAll();
     await repo.clearAll();
@@ -770,7 +1011,9 @@ class AppState extends ChangeNotifier {
     tasks = <Task>[];
     plans = <Plan>[];
     notes = <DayNote>[];
+    events = <DayEvent>[];
     sessions = <FocusSession>[];
+    locked = false;
     badges.clear();
     _notifIds.clear();
     _planned = <PlannedReminder>[];

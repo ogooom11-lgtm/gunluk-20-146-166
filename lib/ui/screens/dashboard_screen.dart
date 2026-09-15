@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/l10n/app_strings.dart';
+import '../../core/models/day_event.dart';
 import '../../core/models/plan.dart';
 import '../../core/models/stats.dart';
 import '../../core/models/task.dart';
@@ -11,10 +12,12 @@ import '../app_scope.dart';
 import '../widgets/charts.dart';
 import '../widgets/common.dart';
 import '../widgets/day_timeline.dart';
+import '../widgets/event_editor_sheet.dart';
 import '../widgets/progress_ring.dart';
 import '../widgets/selectors.dart';
 import '../widgets/task_tile.dart';
 import 'achievements_screen.dart';
+import 'events_screen.dart';
 import 'focus_screen.dart';
 import 'plan_details_screen.dart';
 import 'reports_screen.dart';
@@ -119,6 +122,8 @@ class DashboardScreen extends StatelessWidget {
               const SizedBox(height: 12),
               _quoteCard(context),
             ],
+            const SizedBox(height: 12),
+            _eventsCard(context),
             const SizedBox(height: 12),
             _journalCard(context),
             if (today.where((Task t) => t.hasTime).isNotEmpty) ...<Widget>[
@@ -614,6 +619,66 @@ class DashboardScreen extends StatelessWidget {
                 ],
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _eventsCard(BuildContext context) {
+    final app = context.app;
+    final List<DayEvent> events = app.eventsOn(Dates.today());
+    return AppCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Icon(Icons.event_note_rounded, color: context.palette.seed),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(context.tr('home.eventsToday'), style: Theme.of(context).textTheme.titleSmall),
+              ),
+              if (events.isNotEmpty)
+                Pill(
+                  label: context.numStr(events.length),
+                  dense: true,
+                  color: context.palette.seed,
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (events.isEmpty)
+            Text(context.tr('home.eventsNone'), style: Theme.of(context).textTheme.bodySmall)
+          else
+            for (final DayEvent event in events.take(4)) ...<Widget>[
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: EventTile(event: event, dense: true),
+              ),
+            ],
+          const Divider(height: 22),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => showEventEditorSheet(context, day: Dates.today()),
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: Text(context.tr('event.new')),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton.tonalIcon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(builder: (_) => const EventsScreen()),
+                  ),
+                  icon: const Icon(Icons.list_alt_rounded, size: 18),
+                  label: Text(context.tr('event.title')),
+                ),
+              ),
+            ],
           ),
         ],
       ),

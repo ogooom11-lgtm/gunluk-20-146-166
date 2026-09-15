@@ -113,12 +113,17 @@ class NotificationService {
     TzService.ensure();
     const AndroidInitializationSettings android = AndroidInitializationSettings(statusIcon);
     const InitializationSettings settings = InitializationSettings(android: android);
-    await _plugin.initialize(
-      settings,
-      onDidReceiveNotificationResponse: _handleResponse,
-      onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
-    );
-    _initialized = true;
+    try {
+      await _plugin.initialize(
+        settings,
+        onDidReceiveNotificationResponse: _handleResponse,
+        onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
+      );
+      _initialized = true;
+    } catch (_) {
+      // الإشعارات غير متاحة في هذه البيئة (مثل الاختبارات) — التطبيق يكمل عمله.
+      _initialized = false;
+    }
     await refreshExactStatus();
   }
 

@@ -598,3 +598,92 @@ Future<bool> showConfirmDialog(
   );
   return result ?? false;
 }
+
+/// نافذة إدخال كلمة سر (مع تأكيد اختياري).
+Future<String?> showPasswordDialog(
+  BuildContext context, {
+  required String title,
+  String? fieldLabel,
+  bool confirm = false,
+  String? submitLabel,
+  String? hint,
+  int minLength = 4,
+  String? shortMessage,
+}) {
+  final TextEditingController first = TextEditingController();
+  final TextEditingController second = TextEditingController();
+  String? error;
+
+  return showDialog<String>(
+    context: context,
+    builder: (BuildContext context) => StatefulBuilder(
+      builder: (BuildContext context, StateSetter setState) => AlertDialog(
+        title: Text(title),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            TextField(
+              controller: first,
+              autofocus: true,
+              obscureText: true,
+              decoration: InputDecoration(
+                labelText: fieldLabel ?? context.tr('security.password'),
+                prefixIcon: const Icon(Icons.lock_outline_rounded),
+              ),
+            ),
+            if (confirm) ...<Widget>[
+              const SizedBox(height: 12),
+              TextField(
+                controller: second,
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: context.tr('security.passwordConfirm'),
+                  prefixIcon: const Icon(Icons.lock_outline_rounded),
+                ),
+              ),
+            ],
+            const SizedBox(height: 8),
+            if (error != null)
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: Text(
+                  error!,
+                  style: Theme.of(context)
+                      .textTheme
+                      .labelSmall
+                      ?.copyWith(color: const Color(0xFFE05B5B)),
+                ),
+              )
+            else
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: Text(hint ?? context.tr('security.passwordHint'),
+                    style: Theme.of(context).textTheme.labelSmall),
+              ),
+          ],
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(context.tr('common.cancel')),
+          ),
+          FilledButton(
+            onPressed: () {
+              final String value = first.text;
+              if (value.trim().length < minLength) {
+                setState(() => error = shortMessage ?? context.tr('security.passwordTooShort'));
+                return;
+              }
+              if (confirm && value != second.text) {
+                setState(() => error = context.tr('security.passwordMismatch'));
+                return;
+              }
+              Navigator.of(context).pop(value);
+            },
+            child: Text(submitLabel ?? context.tr('common.confirm')),
+          ),
+        ],
+      ),
+    ),
+  );
+}

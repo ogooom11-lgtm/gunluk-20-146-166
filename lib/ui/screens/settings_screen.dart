@@ -11,6 +11,7 @@ import 'appearance_screen.dart';
 import 'backup_screen.dart';
 import 'categories_screen.dart';
 import 'notification_settings_screen.dart';
+import 'security_screen.dart';
 
 /// شاشة الإعدادات الرئيسية.
 class SettingsScreen extends StatelessWidget {
@@ -227,6 +228,26 @@ class SettingsScreen extends StatelessWidget {
                 icon: Icons.dashboard_customize_rounded,
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(builder: (_) => const NotificationSettingsScreen()),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          SettingsGroup(
+            title: context.tr('settings.security'),
+            icon: Icons.shield_rounded,
+            subtitle: context.tr('security.subtitle'),
+            children: <Widget>[
+              SettingsTile(
+                title: context.tr('security.title'),
+                subtitle: context.tr('security.subtitle'),
+                icon: settings.lockEnabled ? Icons.lock_rounded : Icons.lock_open_rounded,
+                trailing: Text(
+                  context.tr(settings.lockEnabled ? 'common.enabled' : 'common.disabled'),
+                  style: Theme.of(context).textTheme.labelMedium,
+                ),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(builder: (_) => const SecurityScreen()),
                 ),
               ),
             ],

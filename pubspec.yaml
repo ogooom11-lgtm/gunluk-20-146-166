@@ -25,6 +25,9 @@ dependencies:
   flutter_local_notifications: ^17.2.4
   timezone: ^0.9.0
 
+  # بصمات SHA-256 و HMAC لاشتقاق مفاتيح التشفير (نسخة احتياطية مشفّرة + قفل بكلمة سر)
+  crypto: ^3.0.3
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

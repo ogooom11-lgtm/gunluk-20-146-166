@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 
 import '../../core/l10n/app_strings.dart';
+import '../../core/models/day_event.dart';
 import '../../core/models/task.dart';
 import '../../core/utils/dates.dart';
 import '../app_scope.dart';
 import '../widgets/common.dart';
 import '../widgets/day_timeline.dart';
+import '../widgets/event_editor_sheet.dart';
 import '../widgets/month_calendar.dart';
 import '../widgets/pickers.dart';
 import '../widgets/quick_add_sheet.dart';
 import '../widgets/task_tile.dart';
+import 'events_screen.dart';
 
 enum _CalView { month, week, day }
 
@@ -170,6 +173,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
               ],
           ],
           const SizedBox(height: 6),
+          _dayEvents(context),
+          const SizedBox(height: 10),
           AppCard(
             padding: const EdgeInsets.fromLTRB(12, 14, 12, 12),
             child: DayTimeline(
@@ -183,6 +188,44 @@ class _CalendarScreenState extends State<CalendarScreen> {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  /// أحداث اليوم المختار (تبقى محفوظة دائمًا).
+  Widget _dayEvents(BuildContext context) {
+    final app = context.app;
+    final List<DayEvent> events = app.eventsOn(widget.selectedDay);
+    return AppCard(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Icon(Icons.event_note_rounded, size: 18, color: context.palette.seed),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(context.tr('calendar.events'), style: Theme.of(context).textTheme.titleSmall),
+              ),
+              TextButton.icon(
+                onPressed: () => showEventEditorSheet(context, day: widget.selectedDay),
+                icon: const Icon(Icons.add_rounded, size: 17),
+                label: Text(context.tr('common.add')),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          if (events.isEmpty)
+            Text(context.tr('event.emptyToday'), style: Theme.of(context).textTheme.bodySmall)
+          else
+            for (final DayEvent event in events) ...<Widget>[
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: EventTile(event: event, dense: true),
+              ),
+            ],
         ],
       ),
     );
