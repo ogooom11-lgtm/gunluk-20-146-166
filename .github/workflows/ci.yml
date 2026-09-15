@@ -48,7 +48,8 @@ jobs:
           TEST_LOG: ${{ runner.temp }}/test.txt
         run: |
           python3 <<'PY'
-          import json, os, subprocess
+          import collections, json, os, re, subprocess
+
 
           def read(path):
               if not os.path.exists(path):
@@ -56,22 +57,44 @@ jobs:
               with open(path, encoding='utf-8', errors='replace') as fh:
                   return fh.read()
 
+
           analyze = read(os.environ['ANALYZE_LOG'])
           tests = read(os.environ['TEST_LOG'])
-          issues, seen = [], set()
+          flow = re.compile(r'^(error|warning|info)\s+•\s+(.*?)\s+•\s+(\S+):(\d+):(\d+)\s+•\s+(\S+)$')
+          groups = collections.OrderedDict()
+          other = []
           for line in analyze.splitlines():
-              if ' • ' not in line:
-                  continue
-              key = line.strip()
-              if key in seen:
-                  continue
-              seen.add(key)
-              issues.append(key)
-          body = 'عدد ملاحظات التحليل: %d\n\n%s' % (len(issues), '\n'.join(issues[:80]))
-          if not issues and analyze.strip():
-              body += '\n--- مخرجات التحليل ---\n' + analyze[-2000:]
-          body += '\n\n--- مخرجات الاختبارات ---\n' + tests[-3000:]
-          data = json.dumps({'body': 'تقرير CI\n\n```\n' + body[-10000:] + '\n```'})
+              m = flow.match(line.strip())
+              if m:
+                  sev, msg, path, ln, col, code = m.groups()
+                  g = groups.setdefault((path, code), {'n': 0, 'msg': msg, 'sev': sev, 'at': []})
+                  g['n'] += 1
+                  if len(g['at']) < 3:
+                      g['at'].append('%s:%s' % (ln, col))
+              elif line.strip() and 'Analyzing' not in line:
+                  other.append(line.strip())
+
+          body = 'ملاحظات التحليل: %d في %d (ملف/رمز)\n\n' % (
+              sum(g['n'] for g in groups.values()), len(groups))
+          for (path, code), g in groups.items():
+              body += '%s ×%d [%s] %s • %s\n' % (path, g['n'], g['sev'], g['msg'][:90], code)
+          if other and not groups:
+              body += '--- مخرجات التحليل ---\n' + '\n'.join(other[:25]) + '\n'
+
+          tlines = tests.splitlines()
+          hits = []
+          for line in tlines:
+              st = line.strip()
+              if '[E]' in st or st.startswith('/home/') or re.match(r'^(Expected|Actual|Which|Error):', st):
+                  if len(st) > 200:
+                      st = st[:200] + '…'
+                  hits.append(st)
+          body += '\n--- الاختبارات ---\n' + '\n'.join(hits[-40:])
+          if not hits:
+              body += '(لا مخرجات)'
+          body += '\n\n--- ذيل سجل الاختبارات ---\n' + tests[-1200:]
+
+          data = json.dumps({'body': 'تقرير CI\n\n```\n' + body[:30000] + '\n```'})
           url = ('https://api.github.com/repos/%s/commits/%s/comments'
                  % (os.environ['GITHUB_REPOSITORY'], os.environ['GITHUB_SHA']))
           subprocess.run(['curl', '-sS', '-X', 'POST',

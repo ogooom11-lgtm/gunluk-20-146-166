@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../core/l10n/app_strings.dart';
 import '../core/utils/dates.dart';
 import '../data/app_state.dart';
 import '../services/notification_service.dart';
@@ -126,11 +127,14 @@ class _RootShellState extends State<RootShell> {
           ConfettiOverlay(play: _confetti, onDone: () => setState(() => _confetti = false)),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => showQuickAddSheet(context, day: _index == 1 ? _selectedDay : Dates.today()),
+      // الضغط الطويل يفتح المحرّر الكامل مباشرة (الزر نفسه لا يدعم onLongPress).
+      floatingActionButton: GestureDetector(
         onLongPress: () => showQuickAddSheet(context, day: Dates.today(), fullEditor: true),
-        tooltip: context.tr('home.quickAdd'),
-        child: const Icon(Icons.add_rounded, size: 30),
+        child: FloatingActionButton(
+          onPressed: () => showQuickAddSheet(context, day: _index == 1 ? _selectedDay : Dates.today()),
+          tooltip: context.tr('home.quickAdd'),
+          child: const Icon(Icons.add_rounded, size: 30),
+        ),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../core/l10n/app_strings.dart';
 import '../../core/models/day_note.dart';
 import '../../core/models/task.dart';
 import '../../theme/app_theme.dart';

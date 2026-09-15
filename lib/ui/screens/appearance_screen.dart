@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/enums.dart';
+import '../../core/l10n/app_strings.dart';
 import '../../core/models/app_settings.dart';
 import '../../theme/palettes.dart';
 import '../app_scope.dart';

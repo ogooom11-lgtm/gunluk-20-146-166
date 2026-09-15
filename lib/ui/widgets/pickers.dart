@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/l10n/app_strings.dart';
 import '../../core/utils/dates.dart';
 import '../../theme/app_theme.dart';
 import '../app_scope.dart';

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/l10n/app_strings.dart';
 import '../../core/models/plan.dart';
 import '../../core/models/stats.dart';
 import '../../core/utils/dates.dart';

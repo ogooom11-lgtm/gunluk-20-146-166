@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/enums.dart';
+import '../../core/l10n/app_strings.dart';
 import '../../core/l10n/date_names.dart';
 import '../../core/models/plan.dart';
 import '../../core/models/stats.dart';

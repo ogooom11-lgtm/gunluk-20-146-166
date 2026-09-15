@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/l10n/app_strings.dart';
 import '../app_scope.dart';
 import '../widgets/common.dart';
 import '../widgets/progress_ring.dart';
