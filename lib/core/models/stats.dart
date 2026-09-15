@@ -408,9 +408,7 @@ class StatsEngine {
       cursor = Dates.addDays(cursor, 1);
     }
 
-    if (next == null) {
-      next = plan.paused ? null : plan.nextOccurrence(n);
-    }
+    next ??= plan.paused ? null : plan.nextOccurrence(n);
 
     // سلسلة الخطة: أيام مجدولة متتالية مُنجزة (بغض النظر عن أيام الراحة).
     int streak = 0;

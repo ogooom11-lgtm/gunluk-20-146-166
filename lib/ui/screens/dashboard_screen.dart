@@ -376,7 +376,8 @@ class DashboardScreen extends StatelessWidget {
                         ),
                       ],
                     ),
-                  );
+                  ) ??
+                      false;
                   if (confirmed) {
                     await context.appRead.moveAllPendingToTomorrow();
                   }

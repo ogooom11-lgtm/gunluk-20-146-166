@@ -278,18 +278,6 @@ class AppState extends ChangeNotifier {
     if (reschedule) _scheduleReminderRebuild();
   }
 
-  Future<void> _upsertTaskRaw(Task task, {bool reschedule = true}) async {
-    final int index = tasks.indexWhere((Task t) => t.id == task.id);
-    if (index >= 0) {
-      tasks[index] = task;
-    } else {
-      tasks.add(task);
-    }
-    _evaluateBadges();
-    markDirty();
-    if (reschedule) _scheduleReminderRebuild();
-  }
-
   Future<void> deleteTask(String id) async {
     tasks.removeWhere((Task t) => t.id == id);
     await notifications.cancelTaskReminders(id);

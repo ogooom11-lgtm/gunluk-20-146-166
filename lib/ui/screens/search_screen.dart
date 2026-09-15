@@ -140,12 +140,10 @@ class _SearchScreenState extends State<SearchScreen> {
                       allowClear: true,
                     );
                     if (!mounted || picked == null) return;
-                    if (picked != null) {
-                      setState(() {
-                        _from = picked;
-                        if (_to != null && Dates.diffDays(_from!, _to!) < 0) _to = null;
-                      });
-                    }
+                    setState(() {
+                      _from = picked;
+                      if (_to != null && Dates.diffDays(_from!, _to!) < 0) _to = null;
+                    });
                   },
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,

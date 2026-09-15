@@ -230,9 +230,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   Future<void> _pickMonthYear() async {
     final DateTime? picked = await showDayPickerSheet(context, initial: widget.selectedDay);
     if (!mounted || picked == null) return;
-    if (picked != null) {
-      setState(() => _month = DateTime(picked.year, picked.month));
-      widget.onDayChanged(picked);
-    }
+    setState(() => _month = DateTime(picked.year, picked.month));
+    widget.onDayChanged(picked);
   }
 }
