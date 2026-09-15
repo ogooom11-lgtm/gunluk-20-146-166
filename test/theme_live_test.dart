@@ -30,8 +30,9 @@ void main() {
     expect(appWidget.themeMode, ThemeMode.dark);
     expect(appWidget.locale?.languageCode, 'en');
 
-    // ثم أن السمة الفعلية سارية (بعد انتهاء تحريك السمة).
-    await tester.pumpAndSettle();
+    // ثم أن السمة الفعلية سارية (بعد انتهاء تحريك السمة ٢٠٠ م.ث).
+    // لا نستخدم pumpAndSettle لأن شاشة البداية تُشغّل حركة متكرّرة لا تنتهي.
+    await tester.pump(const Duration(milliseconds: 400));
     context = tester.element(find.byType(SplashScreen));
     expect(Theme.of(context).brightness, Brightness.dark);
     expect(Localizations.localeOf(context).languageCode, 'en');
@@ -39,7 +40,7 @@ void main() {
     await app.updateSettings(
       app.settings.copyWith(themeMode: AppThemeMode.light, language: 'ar'),
     );
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 400));
 
     appWidget = tester.widget<MaterialApp>(find.byType(MaterialApp));
     expect(appWidget.themeMode, ThemeMode.light);
