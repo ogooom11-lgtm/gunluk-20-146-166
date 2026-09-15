@@ -93,9 +93,9 @@ void main() {
     await tester.pumpWidget(
       _harness(
         app,
-        SizedBox(
-          height: 500,
-          child: DayTimeline(day: Dates.today(), tasks: tasks),
+        // مثل الاستخدام الحقيقي: داخل قائمة قابلة للتمرير (الارتفاع غير مقيّد).
+        ListView(
+          children: <Widget>[DayTimeline(day: Dates.today(), tasks: tasks)],
         ),
       ),
     );

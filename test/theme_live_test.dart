@@ -25,6 +25,13 @@ void main() {
     );
     await tester.pump();
 
+    // يتحقق من أن MaterialApp نفسه أُعيد بناؤه بالقيم الجديدة.
+    MaterialApp appWidget = tester.widget<MaterialApp>(find.byType(MaterialApp));
+    expect(appWidget.themeMode, ThemeMode.dark);
+    expect(appWidget.locale?.languageCode, 'en');
+
+    // ثم أن السمة الفعلية سارية (بعد انتهاء تحريك السمة).
+    await tester.pumpAndSettle();
     context = tester.element(find.byType(SplashScreen));
     expect(Theme.of(context).brightness, Brightness.dark);
     expect(Localizations.localeOf(context).languageCode, 'en');
@@ -32,8 +39,10 @@ void main() {
     await app.updateSettings(
       app.settings.copyWith(themeMode: AppThemeMode.light, language: 'ar'),
     );
-    await tester.pump();
+    await tester.pumpAndSettle();
 
+    appWidget = tester.widget<MaterialApp>(find.byType(MaterialApp));
+    expect(appWidget.themeMode, ThemeMode.light);
     context = tester.element(find.byType(SplashScreen));
     expect(Theme.of(context).brightness, Brightness.light);
     expect(Localizations.localeOf(context).languageCode, 'ar');
