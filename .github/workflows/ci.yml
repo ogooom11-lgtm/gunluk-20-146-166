@@ -21,8 +21,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    env:
-      REPORT: ${{ runner.temp }}/report.txt
     steps:
       - uses: actions/checkout@v4
       # قناة stable تضمن أحدث إصدار مستقر (يحتاج المشروع Dart ‏3.8.1 أو أحدث)
@@ -36,11 +34,13 @@ jobs:
         run: flutter pub get
       - name: التحليل
         run: |
+          REPORT="$RUNNER_TEMP/report.txt"
           set -o pipefail
           flutter analyze 2>&1 | tee -a "$REPORT" || echo "analyze_exit=$?" | tee -a "$REPORT"
       - name: الاختبارات
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_tests }}
         run: |
+          REPORT="$RUNNER_TEMP/report.txt"
           set -o pipefail
           flutter test --reporter expanded 2>&1 | tee -a "$REPORT" || echo "test_exit=$?" | tee -a "$REPORT"
       # ينشر مخرجات التحليل/الاختبارات كتعليق على الـ commit لأن سجلات Actions غير قابلة للقراءة من بيئة التطوير.
@@ -49,6 +49,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
+          REPORT="$RUNNER_TEMP/report.txt"
           if [ ! -s "$REPORT" ]; then echo "لا يوجد تقرير"; exit 0; fi
           python3 - "$REPORT" <<'PY'
           import json, os, subprocess, sys
