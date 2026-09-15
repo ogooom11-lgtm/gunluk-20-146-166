@@ -29,6 +29,12 @@ class _ConfettiOverlayState extends State<ConfettiOverlay> with SingleTickerProv
         widget.onDone?.call();
       }
     });
+    // إن بدأت الرسوم مفعّلة من أول بناء، نطلق الحركة بعد الإطار الأول.
+    if (widget.play) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _start();
+      });
+    }
   }
 
   @override

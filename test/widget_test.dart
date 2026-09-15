@@ -14,20 +14,21 @@ import 'package:gunluk/ui/widgets/common.dart';
 import 'package:gunluk/ui/widgets/progress_ring.dart';
 import 'package:gunluk/ui/widgets/task_tile.dart';
 
-Widget _harness(AppState app, Widget child) => MaterialApp(
-      debugShowCheckedModeBanner: false,
-      locale: const Locale('ar'),
-      supportedLocales: AppLocalizations.supportedLocales,
-      localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
-        AppLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      theme: AppTheme.light(app.settings),
-      home: AppScope(
-        state: app,
-        child: Scaffold(body: child),
+Widget _harness(AppState app, Widget child) => AppScope(
+      // مثل main.dart: النطاق أعلى MaterialApp حتى تراه المسارات المنبثقة (الأوراق والحوارات).
+      state: app,
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        locale: const Locale('ar'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        theme: AppTheme.light(app.settings),
+        home: Scaffold(body: child),
       ),
     );
 

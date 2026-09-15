@@ -16,20 +16,21 @@ import 'package:gunluk/ui/widgets/quick_add_sheet.dart';
 import 'package:gunluk/ui/widgets/settings_tiles.dart';
 
 /// غلاف اختبار: تطبيق مصغّر بالعربية مع مزوّد النصوص وحالة التطبيق.
-Widget _harness(AppState app, Widget child) => MaterialApp(
-      debugShowCheckedModeBanner: false,
-      locale: const Locale('ar'),
-      supportedLocales: AppLocalizations.supportedLocales,
-      localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
-        AppLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      theme: AppTheme.light(app.settings),
-      home: AppScope(
-        state: app,
-        child: Scaffold(body: child),
+Widget _harness(AppState app, Widget child) => AppScope(
+      // مثل main.dart: النطاق أعلى MaterialApp حتى تراه المسارات المنبثقة (الأوراق والحوارات).
+      state: app,
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        locale: const Locale('ar'),
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        theme: AppTheme.light(app.settings),
+        home: Scaffold(body: child),
       ),
     );
 
@@ -86,7 +87,7 @@ void main() {
     final List<Task> tasks = <Task>[
       _timed('t1', 'اجتماع الفريق', 9 * 60, duration: 60),
       _timed('t2', 'قراءة', 21 * 60, duration: 30, done: true),
-      Task(id: 't3', title: 'بدون وقت', date: Dates.today()),
+      Task(id: 't3', title: 'مهمة بلا وقت', date: Dates.today()),
     ];
 
     await tester.pumpWidget(
@@ -102,7 +103,7 @@ void main() {
 
     expect(find.byType(DayTimeline), findsOneWidget);
     expect(find.text('اجتماع الفريق'), findsOneWidget);
-    expect(find.text('بدون وقت'), findsOneWidget);
+    expect(find.text('مهمة بلا وقت'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

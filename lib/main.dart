@@ -66,8 +66,11 @@ class _InjaziAppState extends State<InjaziApp> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return AppScope(
       state: widget.state,
-      child: Builder(
-        builder: (BuildContext context) {
+      // يعيد بناء MaterialApp عند أي تغيير في الحالة، فتسري السمة واللغة
+      // والاتجاه وحجم الخط فورًا من الإعدادات.
+      child: ListenableBuilder(
+        listenable: widget.state,
+        builder: (BuildContext context, Widget? _) {
           final AppState app = widget.state;
           final settings = app.settings;
           final ThemeMode mode = switch (settings.themeMode) {
