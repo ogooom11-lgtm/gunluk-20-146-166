@@ -256,7 +256,29 @@ class AppState extends ChangeNotifier {
 
   List<Task> planTasks(String planId) => tasks.where((Task t) => t.planId == planId).toList();
 
+  /// نسخة الخطة في يوم محدّد (إن وُجدت).
+  Task? taskFor(String planId, DateTime day) {
+    for (final Task t in tasks) {
+      if (t.planId == planId && Dates.sameDay(t.date, day)) return t;
+    }
+    return null;
+  }
+
   Future<void> upsertTask(Task task, {bool reschedule = true}) async {
+    // حماية: أي مهمة بدون معرّف تحصل على معرّف جديد
+    final Task safe = task.id.isEmpty ? task.duplicate(newId: Ids.next('t')) : task;
+    final int index = tasks.indexWhere((Task t) => t.id == safe.id);
+    if (index >= 0) {
+      tasks[index] = safe;
+    } else {
+      tasks.add(safe);
+    }
+    _evaluateBadges();
+    markDirty();
+    if (reschedule) _scheduleReminderRebuild();
+  }
+
+  Future<void> _upsertTaskRaw(Task task, {bool reschedule = true}) async {
     final int index = tasks.indexWhere((Task t) => t.id == task.id);
     if (index >= 0) {
       tasks[index] = task;
@@ -495,8 +517,8 @@ class AppState extends ChangeNotifier {
 
   DayStat statFor(DateTime day) => StatsEngine.dayStat(day, tasksOn(day));
 
-  StatsSummary summary({int days = 7}) {
-    final DateTime to = Dates.today();
+  StatsSummary summary({int days = 7, int offset = 0}) {
+    final DateTime to = Dates.addDays(Dates.today(), -offset);
     final DateTime from = Dates.addDays(to, -(days - 1));
     return StatsEngine.summarize(
       from: from,

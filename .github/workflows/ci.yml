@@ -21,9 +21,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # قناة stable تضمن أحدث إصدار مستقر (يحتاج المشروع Dart ‏3.8.1 أو أحدث)
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.35.0'
           channel: stable
           cache: true
       - name: معلومات البيئة
@@ -49,7 +49,6 @@ jobs:
           java-version: '17'
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.35.0'
           channel: stable
           cache: true
       - name: تحضير الحزم
