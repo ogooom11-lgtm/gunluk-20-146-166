@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 /// أولوية المهمة — تؤثر على ترتيب العرض، اللون، ونقاط الخبرة.

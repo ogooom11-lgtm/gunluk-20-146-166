@@ -55,7 +55,10 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
                             context.numStr(app.level),
                             style: Theme.of(context).textTheme.headlineSmall,
                           ),
-                          Text(context.tr('badge.level'), style: Theme.of(context).textTheme.labelSmall),
+                          Text(
+                            context.tr('badge.level', <String, String>{'n': context.numStr(app.level)}),
+                            style: Theme.of(context).textTheme.labelSmall,
+                          ),
                         ],
                       ),
                     ),

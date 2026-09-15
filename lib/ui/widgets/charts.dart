@@ -214,7 +214,7 @@ class HourBars extends StatelessWidget {
                       child: Align(
                         alignment: Alignment.bottomCenter,
                         child: FractionallySizedBox(
-                          heightFactor: (buckets[i] / maxValue).clamp(0.04, 1),
+                          heightFactor: (buckets[i] / maxValue).clamp(0.04, 1.0),
                           child: Container(
                             decoration: BoxDecoration(
                               gradient: LinearGradient(

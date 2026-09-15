@@ -247,7 +247,7 @@ class _FocusScreenState extends State<FocusScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: Slider(
-                  value: _minutes.toDouble().clamp(5, 120),
+                  value: _minutes.toDouble().clamp(5.0, 120.0),
                   min: 5,
                   max: 120,
                   divisions: 23,

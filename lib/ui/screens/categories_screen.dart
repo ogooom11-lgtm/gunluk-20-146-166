@@ -28,7 +28,10 @@ class CategoriesScreen extends StatelessWidget {
       body: ListView(
         padding: EdgeInsets.fromLTRB(context.gap.screenPadding, 8, context.gap.screenPadding, 120),
         children: <Widget>[
-          Text(context.tr('category.taskCount'), style: Theme.of(context).textTheme.bodySmall),
+          Text(
+            context.tr('category.taskCount', <String, String>{'n': context.numStr(app.tasks.length)}),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
           const SizedBox(height: 14),
           for (final Category category in categories) ...<Widget>[
             AppCard(
@@ -60,8 +63,11 @@ class CategoriesScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 3),
                         Text(
-                          '${context.tr('category.taskCount')}: '
-                          '${context.numStr(app.tasks.where((Task t) => t.categoryId == category.id).length)}',
+                          context.tr('category.taskCount', <String, String>{
+                            'n': context.numStr(
+                              app.tasks.where((Task t) => t.categoryId == category.id).length,
+                            ),
+                          }),
                           style: Theme.of(context).textTheme.labelSmall,
                         ),
                       ],

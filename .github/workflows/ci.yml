@@ -34,31 +34,49 @@ jobs:
         run: flutter pub get
       - name: التحليل
         run: |
-          REPORT="$RUNNER_TEMP/report.txt"
-          set -o pipefail
-          flutter analyze 2>&1 | tee -a "$REPORT" || echo "analyze_exit=$?" | tee -a "$REPORT"
+          flutter analyze 2>&1 | tee "$RUNNER_TEMP/analyze.txt" || true
       - name: الاختبارات
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_tests }}
         run: |
-          REPORT="$RUNNER_TEMP/report.txt"
-          set -o pipefail
-          flutter test --reporter expanded 2>&1 | tee -a "$REPORT" || echo "test_exit=$?" | tee -a "$REPORT"
-      # ينشر مخرجات التحليل/الاختبارات كتعليق على الـ commit لأن سجلات Actions غير قابلة للقراءة من بيئة التطوير.
+          flutter test --reporter expanded 2>&1 | tee "$RUNNER_TEMP/test.txt" || true
+      # ينشر ملخّص التحليل/الاختبارات كتعليق على الـ commit لأن سجلات Actions غير قابلة للقراءة من بيئة التطوير.
       - name: نشر تقرير الفشل
         if: always()
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          ANALYZE_LOG: ${{ runner.temp }}/analyze.txt
+          TEST_LOG: ${{ runner.temp }}/test.txt
         run: |
-          REPORT="$RUNNER_TEMP/report.txt"
-          if [ ! -s "$REPORT" ]; then echo "لا يوجد تقرير"; exit 0; fi
-          python3 - "$REPORT" <<'PY'
-          import json, os, subprocess, sys
-          raw = open(sys.argv[1], encoding='utf-8', errors='replace').read()
-          body = raw[-6000:]
-          payload = json.dumps({'body': 'تقرير CI\n\n```\n' + body + '\n```'})
-          url = 'https://api.github.com/repos/%s/commits/%s/comments' % (os.environ['GITHUB_REPOSITORY'], os.environ['GITHUB_SHA'])
-          subprocess.run(['curl', '-sS', '-X', 'POST', '-H', 'Authorization: Bearer ' + os.environ['GITHUB_TOKEN'],
-                          '-H', 'Accept: application/vnd.github+json', url, '-d', payload], check=False)
+          python3 <<'PY'
+          import json, os, subprocess
+
+          def read(path):
+              if not os.path.exists(path):
+                  return ''
+              with open(path, encoding='utf-8', errors='replace') as fh:
+                  return fh.read()
+
+          analyze = read(os.environ['ANALYZE_LOG'])
+          tests = read(os.environ['TEST_LOG'])
+          issues, seen = [], set()
+          for line in analyze.splitlines():
+              if ' • ' not in line:
+                  continue
+              key = line.strip()
+              if key in seen:
+                  continue
+              seen.add(key)
+              issues.append(key)
+          body = 'عدد ملاحظات التحليل: %d\n\n%s' % (len(issues), '\n'.join(issues[:80]))
+          if not issues and analyze.strip():
+              body += '\n--- مخرجات التحليل ---\n' + analyze[-2000:]
+          body += '\n\n--- مخرجات الاختبارات ---\n' + tests[-3000:]
+          data = json.dumps({'body': 'تقرير CI\n\n```\n' + body[-10000:] + '\n```'})
+          url = ('https://api.github.com/repos/%s/commits/%s/comments'
+                 % (os.environ['GITHUB_REPOSITORY'], os.environ['GITHUB_SHA']))
+          subprocess.run(['curl', '-sS', '-X', 'POST',
+                          '-H', 'Authorization: Bearer ' + os.environ['GITHUB_TOKEN'],
+                          '-H', 'Accept: application/vnd.github+json', url, '-d', data], check=False)
           PY
 
   apk:

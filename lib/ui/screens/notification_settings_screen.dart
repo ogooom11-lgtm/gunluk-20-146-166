@@ -250,7 +250,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
               ),
               SettingsSwitchTile(
                 title: context.tr('notif.actionDone'),
-                subtitle: context.tr('notif.actionSnooze'),
+                subtitle: context.tr('notif.actionSnooze', <String, String>{'n': context.numStr(settings.snoozeMinutes)}),
                 icon: Icons.bolt_rounded,
                 value: settings.actionButtons,
                 onChanged: (bool value) => app.updateSettings(
@@ -329,7 +329,12 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
               ),
               SettingsTile(
                 title: context.tr('notif.preview'),
-                subtitle: context.tr('notif.summaryBody'),
+                // نفس القيم التجريبية التي يرسلها الإشعار التجريبي
+                subtitle: context.tr('notif.summaryBody', <String, String>{
+                  'done': '3',
+                  'total': '7',
+                  'left': '4',
+                }),
                 icon: Icons.send_rounded,
                 onTap: () async {
                   setState(() => _busy = true);

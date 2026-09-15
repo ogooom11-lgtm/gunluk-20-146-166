@@ -568,7 +568,7 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
             children: <Widget>[
               Expanded(
                 child: Slider(
-                  value: _intervalDays.toDouble().clamp(2, 30),
+                  value: _intervalDays.toDouble().clamp(2.0, 30.0),
                   min: 2,
                   max: 30,
                   divisions: 28,
@@ -587,7 +587,7 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
             children: <Widget>[
               Expanded(
                 child: Slider(
-                  value: _dayOfMonth.toDouble().clamp(1, 31),
+                  value: _dayOfMonth.toDouble().clamp(1.0, 31.0),
                   min: 1,
                   max: 31,
                   divisions: 30,

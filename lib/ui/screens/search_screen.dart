@@ -222,8 +222,10 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
           const SizedBox(height: 16),
           SectionHeader(
-            title: context.tr('search.results'),
-            subtitle: '${context.numStr(results.length)} ${context.tr('search.results')}',
+            title: context.tr(
+              'search.results',
+              <String, String>{'n': context.numStr(results.length)},
+            ),
             icon: Icons.manage_search_rounded,
           ),
           if (results.isEmpty)

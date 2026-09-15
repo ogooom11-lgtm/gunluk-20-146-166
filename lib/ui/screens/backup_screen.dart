@@ -55,13 +55,17 @@ class _BackupScreenState extends State<BackupScreen> {
                       Text(context.tr('backup.subtitle'), style: Theme.of(context).textTheme.titleSmall),
                       const SizedBox(height: 4),
                       Text(
-                        '${context.tr('backup.size')}: ${kb.toStringAsFixed(1)} KB • '
-                        '${context.numStr(app.tasks.length)} ${context.tr('home.todayTasks')}',
+                        '${context.tr('backup.size', <String, String>{
+                          'tasks': context.numStr(app.tasks.length),
+                          'plans': context.numStr(app.plans.length),
+                        })} • ${kb.toStringAsFixed(1)} KB',
                         style: Theme.of(context).textTheme.labelSmall,
                       ),
                       if (app.settings.lastExport != null)
                         Text(
-                          '${context.tr('backup.lastExport')}: ${context.dateStr(app.settings.lastExport!)}',
+                          context.tr('backup.lastExport', <String, String>{
+                            'd': context.dateStr(app.settings.lastExport!),
+                          }),
                           style: Theme.of(context).textTheme.labelSmall,
                         ),
                     ],

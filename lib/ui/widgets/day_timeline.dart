@@ -42,7 +42,7 @@ class _DayTimelineState extends State<DayTimeline> {
     final int nowMinutes = Dates.nowMinutes();
     final double offset =
         ((nowMinutes - widget.startHour * 60) / 60) * _rowHeight - 140;
-    _controller.jumpTo(offset.clamp(0, _controller.position.maxScrollExtent));
+    _controller.jumpTo(offset.clamp(0.0, _controller.position.maxScrollExtent));
   }
 
   @override
@@ -195,10 +195,10 @@ class _DayTimelineState extends State<DayTimeline> {
 
     final Color color = context.app.categoryColor(task.categoryId);
     return PositionedDirectional(
-      top: top.clamp(0, totalHeight - 16),
+      top: top.clamp(0.0, totalHeight - 16),
       start: 66,
       end: 8,
-      height: height.clamp(34, 400),
+      height: height.clamp(34.0, 400.0),
       child: GestureDetector(
         onTap: () => showTaskDetailsSheet(context, task.id),
         child: Container(
