@@ -107,9 +107,9 @@ jobs:
   apk:
     name: بناء APK
     needs: analyze
-    # يُبنى تلقائيًا عند كل دفع على فرع التطوير (لتنزيله من صفحة Actions)،
-    # وعند التشغيل اليدوي حسب المدخل build_apk.
-    if: "${{ github.event_name == 'workflow_dispatch' ? inputs.build_apk : github.ref == 'refs/heads/arena/01a0a2fd-gunluk-20-146-166' }}"
+    # يُبنى عند وجود [apk] في رسالة الـ commit (لتنزيله من صفحة Actions)
+    # أو عند التشغيل اليدوي حسب المدخل build_apk.
+    if: ${{ contains(github.event.head_commit.message, '[apk]') || (github.event_name == 'workflow_dispatch' && inputs.build_apk) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
