@@ -812,7 +812,7 @@ class AppState extends ChangeNotifier {
     final DateTime from = Dates.today();
     final DateTime to = Dates.addDays(from, days);
     final List<DayEvent> out = events
-        .where((DayEvent e) => Dates.diffDays(from, e.day) >= 0 && Dates.diffDays(e.day, to) <= 0)
+        .where((DayEvent e) => Dates.diffDays(from, e.day) >= 0 && Dates.diffDays(e.day, to) >= 0)
         .toList()
       ..sort((DayEvent a, DayEvent b) => DayEvent.compareDesc(b, a));
     return out;

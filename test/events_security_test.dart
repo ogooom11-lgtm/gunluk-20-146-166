@@ -72,7 +72,8 @@ void main() {
       await app.upsertEvent(DayEvent(id: '', title: 'اليوم', day: today));
       await app.upsertEvent(DayEvent(id: '', title: 'أمس', day: Dates.addDays(today, -1)));
 
-      expect(app.upcomingEvents().map((DayEvent e) => e.title), <String>['غدًا', 'اليوم']);
+      // القادمة مرتّبة من الأقرب: اليوم ثم غدًا.
+      expect(app.upcomingEvents().map((DayEvent e) => e.title), <String>['اليوم', 'غدًا']);
       expect(app.pastEvents().map((DayEvent e) => e.title), <String>['أمس']);
       expect(app.eventCountInMonth(today), 3);
     });
