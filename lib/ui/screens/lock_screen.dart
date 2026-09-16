@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/l10n/app_strings.dart';
+import '../../theme/app_theme.dart';
 import '../app_scope.dart';
 import '../widgets/pin_pad.dart';
 import '../widgets/pickers.dart';

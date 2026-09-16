@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/l10n/app_strings.dart';
+import '../../theme/app_theme.dart';
 import '../app_scope.dart';
 
 /// حالة إدخال الرمز — تُستخدم لتلوين النقاط وتحريكها.
@@ -78,7 +79,7 @@ class PinDots extends StatelessWidget {
 class PinKey extends StatefulWidget {
   const PinKey({
     super.key,
-    required this.label,
+    this.label,
     this.icon,
     this.onTap,
     this.onLongPress,

@@ -128,8 +128,7 @@ class SecurityScreen extends StatelessWidget {
                         'n': context.numStr(settings.lockPinLength),
                       })
                     : context.tr('security.legacyPin'),
-                enabled: settings.lockEnabled,
-                onTap: () => _editPinLength(context),
+                onTap: settings.lockEnabled ? () => _editPinLength(context) : null,
               ),
               SettingsValueTile(
                 title: context.tr('security.grace'),
