@@ -33,6 +33,14 @@ class _LockScreenState extends State<LockScreen> with SingleTickerProviderStateM
   int _shake = 0;
   Timer? _timer;
 
+  /// الكتابة من كيبورد الجهاز (خيار متاح بجانب لوحة الأرقام).
+  bool _kbMode = false;
+  final TextEditingController _kbText = TextEditingController();
+  final FocusNode _kbFocus = FocusNode();
+
+  /// جارٍ تجهيز النسخة الاحتياطية قبل البدء من جديد.
+  bool _savingBackup = false;
+
   /// حركة دخول الشاشة.
   late final AnimationController _enter = AnimationController(
     vsync: this,
@@ -52,7 +60,59 @@ class _LockScreenState extends State<LockScreen> with SingleTickerProviderStateM
   void dispose() {
     _timer?.cancel();
     _enter.dispose();
+    _kbText.dispose();
+    _kbFocus.dispose();
     super.dispose();
+  }
+
+  /// تبديل بين لوحة الأرقام المخصّصة وكيبورد الجهاز مع نقل ما كُتب.
+  void _toggleKeyboard() {
+    HapticFeedback.selectionClick();
+    setState(() {
+      _kbMode = !_kbMode;
+      _error = null;
+      _state = PinState.idle;
+      if (_kbMode) {
+        _kbText.text = _digits.join();
+        _kbText.selection = TextSelection.collapsed(offset: _kbText.text.length);
+      } else {
+        _digits
+          ..clear()
+          ..addAll(_kbText.text.split(''));
+      }
+    });
+    if (_kbMode) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _kbFocus.requestFocus();
+      });
+    } else {
+      _kbFocus.unfocus();
+    }
+  }
+
+  /// كتابة من كيبورد الجهاز: أرقام فقط، وعند اكتمال الطول يُتحقق مباشرة
+  /// (أو بانتظار ✓ إن كان الفتح التلقائي موقوفًا).
+  void _onKeyboardChanged(String value) {
+    if (_busy || _waitSeconds > 0) return;
+    final String clean = value.replaceAll(RegExp(r'[^0-9]'), '');
+    if (clean != value) {
+      _kbText.value = TextEditingValue(
+        text: clean,
+        selection: TextSelection.collapsed(offset: clean.length),
+      );
+    }
+    setState(() {
+      _digits
+        ..clear()
+        ..addAll(clean.split(''));
+      _error = null;
+      _state = PinState.idle;
+    });
+    if (_autoUnlock && _digits.length >= _pinLength) {
+      Timer(const Duration(milliseconds: 130), () {
+        if (mounted) _submit();
+      });
+    }
   }
 
   void _startCooldown(int seconds) {
@@ -70,6 +130,7 @@ class _LockScreenState extends State<LockScreen> with SingleTickerProviderStateM
 
   void _push(String digit) {
     if (_busy || _waitSeconds > 0 || _digits.length >= _pinLength) return;
+    if (_kbText.text.isNotEmpty) _kbText.clear();
     setState(() {
       _digits.add(digit);
       _error = null;
@@ -95,6 +156,7 @@ class _LockScreenState extends State<LockScreen> with SingleTickerProviderStateM
   void _clearAll() {
     if (_busy || _digits.isEmpty) return;
     HapticFeedback.mediumImpact();
+    _kbText.clear();
     setState(() {
       _digits.clear();
       _error = null;
@@ -105,6 +167,7 @@ class _LockScreenState extends State<LockScreen> with SingleTickerProviderStateM
   Future<void> _submit() async {
     if (_busy || _waitSeconds > 0 || _digits.length < _pinLength) return;
     final String pin = _digits.join();
+    _kbFocus.unfocus();
     setState(() {
       _busy = true;
       _state = PinState.verifying;
@@ -129,6 +192,7 @@ class _LockScreenState extends State<LockScreen> with SingleTickerProviderStateM
     if (_attempts % 3 == 0) _startCooldown(30);
     Timer(const Duration(milliseconds: 560), () {
       if (!mounted) return;
+      _kbText.clear();
       setState(() {
         _digits.clear();
         _state = PinState.idle;
@@ -153,39 +217,85 @@ class _LockScreenState extends State<LockScreen> with SingleTickerProviderStateM
     HapticFeedback.heavyImpact();
   }
 
+  /// «نسيت كلمة المرور»: نحفظ نسخة مشفّرة في المسار الذي يختاره المستخدم
+  /// أولًا — ثم يبدأ التطبيق من جديد. لا يُحذف شيء إن لم تُحفظ النسخة.
   Future<void> _forgot() async {
-    await showDialog<void>(
-      context: context,
-      builder: (BuildContext context) => AlertDialog(
-        title: Text(context.tr('security.forgot')),
-        content: Text(context.tr('security.forgotDesc')),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(context.tr('common.close')),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFE05B5B)),
-            onPressed: () {
-              Navigator.of(context).pop();
-              _confirmReset();
-            },
-            child: Text(context.tr('security.resetApp')),
-          ),
-        ],
+    final bool go = await showConfirmDialog(
+      context,
+      title: context.tr('security.forgot'),
+      message: context.tr('security.backupFirstDesc'),
+      confirmLabel: context.tr('security.backupThenReset'),
+      danger: false,
+    );
+    if (!go || !mounted) return;
+
+    // كلمة سر النسخة: يختارها المستخدم الآن ويتذكّرها لاستعادتها لاحقًا.
+    final String? password = await showPasswordDialog(
+      context,
+      title: context.tr('backup.passwordPrompt'),
+      fieldLabel: context.tr('backup.passwordPrompt'),
+      confirm: true,
+      hint: context.tr('backup.passwordPromptDesc'),
+      submitLabel: context.tr('security.backupThenReset'),
+      minLength: 6,
+      shortMessage: context.tr('backup.passwordShort'),
+    );
+    if (password == null || !mounted) return;
+
+    final app = context.appRead;
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    setState(() => _savingBackup = true);
+
+    // ١) التشفير
+    final String? encrypted = await app.exportEncryptedJson(password);
+    if (!mounted) return;
+    if (encrypted == null) {
+      setState(() => _savingBackup = false);
+      _toastMessage(context.tr('security.backupFailedNoReset'), error: true);
+      return;
+    }
+
+    // ٢) الحفظ في المسار الذي يختاره المستخدم
+    final String saved = await app.files.saveTextFile(
+      fileName: 'injazi-backup-${_stamp()}.injaz',
+      text: encrypted,
+    ) ??
+        '';
+    if (!mounted) return;
+    setState(() => _savingBackup = false);
+    if (saved.isEmpty || saved == 'error') {
+      // لا نسخة ⇒ لا حذف: تبقى البيانات كما هي.
+      _toastMessage(context.tr('security.backupFailedNoReset'), error: true);
+      return;
+    }
+
+    await app.updateSettings(app.settings.copyWith(lastExport: DateTime.now()));
+
+    // ٣) البدء من جديد بعد نجاح الحفظ فقط
+    await app.resetAll();
+    if (!mounted) return;
+    messenger.showSnackBar(
+      SnackBar(
+        duration: const Duration(seconds: 6),
+        content: Text(context.tr('security.backupSavedStartFresh', <String, String>{'name': saved})),
       ),
     );
   }
 
-  Future<void> _confirmReset() async {
-    final bool confirmed = await showConfirmDialog(
-      context,
-      title: context.tr('security.resetApp'),
-      message: context.tr('security.resetAppConfirm'),
-      confirmLabel: context.tr('common.delete'),
+  String _stamp() {
+    final DateTime now = DateTime.now();
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${now.year}${two(now.month)}${two(now.day)}-${two(now.hour)}${two(now.minute)}';
+  }
+
+  void _toastMessage(String message, {bool error = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: error ? const Color(0xFFE05B5B) : null,
+      ),
     );
-    if (!confirmed) return;
-    await context.appRead.resetAll();
   }
 
   @override
@@ -194,6 +304,26 @@ class _LockScreenState extends State<LockScreen> with SingleTickerProviderStateM
     final String name = app.settings.name.trim();
     final bool blocked = _waitSeconds > 0;
     final int remainingAttempts = 3 - (_attempts % 3);
+
+    // أثناء تجهيز النسخة الاحتياطية قبل البدء من جديد.
+    if (_savingBackup) {
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              const SizedBox(
+                width: 42,
+                height: 42,
+                child: CircularProgressIndicator(strokeWidth: 3),
+              ),
+              const SizedBox(height: 16),
+              Text(context.tr('security.backupInProgress')),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       body: Container(
@@ -353,50 +483,118 @@ class _LockScreenState extends State<LockScreen> with SingleTickerProviderStateM
     );
   }
 
-  /// لوحة الأرقام + روابط المساعدة.
+  /// لوحة الأرقام المخصّصة + زر الكيبورد + روابط المساعدة.
   Widget _keypad(BuildContext context, bool blocked) {
     return Column(
       children: <Widget>[
-        PinPad(
-          enabled: !blocked && !_busy,
-          onDigit: _push,
-          onBackspace: _pop,
-          onClearAll: _clearAll,
-          // زر التأكيد يظهر فقط عندما يكون الفتح التلقائي معطّلًا.
-          onConfirm: _autoUnlock ? null : _submit,
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 220),
+          child: _kbMode
+              ? _keyboardField(context, blocked)
+              : PinPad(
+                  key: const ValueKey<String>('pin_pad'),
+                  enabled: !blocked && !_busy,
+                  maxKeySize: _pinLength > 8 ? 56 : 74,
+                  onDigit: _push,
+                  onBackspace: _pop,
+                  onClearAll: _clearAll,
+                  // زر التأكيد يظهر فقط عندما يكون الفتح التلقائي معطّلًا.
+                  onConfirm: _autoUnlock ? null : _submit,
+                ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 2),
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          textDirection: TextDirection.ltr,
           children: <Widget>[
-            if (_legacy)
-              TextButton.icon(
-                onPressed: _legacyEntry,
-                icon: const Icon(Icons.password_rounded, size: 17),
-                label: Text(context.tr('security.legacyPin')),
-              )
-            else
-              const SizedBox(width: 8),
+            Expanded(
+              child: Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: TextButton.icon(
+                  onPressed: blocked || _busy ? null : _toggleKeyboard,
+                  icon: Icon(
+                    _kbMode ? Icons.dialpad_rounded : Icons.keyboard_alt_outlined,
+                    size: 18,
+                  ),
+                  label: Flexible(
+                    child: Text(
+                      context.tr(_kbMode ? 'security.usePad' : 'security.useKeyboard'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              ),
+            ),
             TextButton(
               onPressed: _forgot,
               child: Text(context.tr('security.pinForgot')),
             ),
+            Expanded(
+              child: Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: _legacy
+                    ? IconButton(
+                        onPressed: _legacyEntry,
+                        icon: const Icon(Icons.password_rounded, size: 20),
+                        tooltip: context.tr('security.legacyPin'),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+            ),
           ],
         ),
+        if (!_autoUnlock && !_kbMode)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(
+              context.tr('security.confirmPin'),
+              style: Theme.of(context).textTheme.labelSmall,
+            ),
+          ),
         Text(
           context.tr('security.pinLockedTip'),
           style: Theme.of(context).textTheme.labelSmall,
           textAlign: TextAlign.center,
         ),
-        const SizedBox(height: 4),
-        Text(
-          context.tr('security.encryptedHint'),
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: Theme.of(context).textTheme.labelSmall?.color?.withAlpha(150),
-              ),
-          textAlign: TextAlign.center,
-        ),
       ],
+    );
+  }
+
+  /// إدخال الرمز من كيبورد الجهاز (أرقام فقط).
+  Widget _keyboardField(BuildContext context, bool blocked) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: TextField(
+        key: const ValueKey<String>('pin_keyboard_field'),
+        controller: _kbText,
+        focusNode: _kbFocus,
+        enabled: !blocked && !_busy,
+        obscureText: true,
+        obscuringCharacter: '●',
+        keyboardType: TextInputType.number,
+        textInputAction: TextInputAction.done,
+        maxLength: _pinLength,
+        textDirection: TextDirection.ltr,
+        textAlign: TextAlign.center,
+        onChanged: _onKeyboardChanged,
+        onSubmitted: (_) => _submit(),
+        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              letterSpacing: 8,
+              fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+            ),
+        decoration: InputDecoration(
+          counterText: '',
+          hintText: '•' * _pinLength,
+          prefixIcon: const Icon(Icons.keyboard_alt_outlined),
+          suffixIcon: _autoUnlock
+              ? null
+              : IconButton(
+                  icon: const Icon(Icons.check_rounded),
+                  tooltip: context.tr('security.confirmPin'),
+                  onPressed: _submit,
+                ),
+        ),
+      ),
     );
   }
 }

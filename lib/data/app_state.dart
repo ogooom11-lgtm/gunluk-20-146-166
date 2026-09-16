@@ -1339,7 +1339,8 @@ class AppState extends ChangeNotifier {
     await updateSettings(settings.copyWith(
       lockEnabled: true,
       lockHash: hash,
-      lockPinLength: pinLength ?? (password.length >= 4 ? password.length : 4),
+      lockPinLength: AppSettings.clampPinLength(
+          pinLength ?? (password.length >= AppSettings.minPinLength ? password.length : AppSettings.minPinLength)),
     ));
     locked = false;
     notifyListeners();

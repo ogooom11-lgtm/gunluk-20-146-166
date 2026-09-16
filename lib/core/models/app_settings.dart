@@ -102,7 +102,7 @@ class AppSettings {
       lockHash: (json['lh'] ?? '').toString(),
       lockWhenBackground: json['lb'] != false,
       lockGraceSeconds: (json['lg2'] as num?)?.toInt() ?? 30,
-      lockPinLength: (json['ll'] as num?)?.toInt() ?? 0,
+      lockPinLength: AppSettings.clampPinLength((json['ll'] as num?)?.toInt() ?? 0),
       lockAutoUnlock: json['lu'] != false,
       secureScreen: json['ss'] == true,
       encryptBackupsByDefault: json['eb'] != false,
@@ -175,6 +175,18 @@ class AppSettings {
   int lockGraceSeconds;
 
   /// عدد أرقام رمز الدخول (0 = رمز قديم بنصوص — يُدخل نصيًا).
+  /// أقل وأقصى طول لكلمة المرور الرقمية (حتى ٦٤ خانة).
+  static const int minPinLength = 4;
+  static const int maxPinLength = 64;
+
+  /// يضبط الطول داخل الحدود؛ و٠ تعني «رمز قديم نصّي» فتبقى كما هي.
+  static int clampPinLength(int value) {
+    if (value <= 0) return 0;
+    if (value < minPinLength) return minPinLength;
+    if (value > maxPinLength) return maxPinLength;
+    return value;
+  }
+
   int lockPinLength;
 
   /// فتح التطبيق تلقائيًا بمجرد اكتمال الرمز الصحيح.
@@ -289,7 +301,7 @@ class AppSettings {
         lockHash: lockHash ?? this.lockHash,
         lockWhenBackground: lockWhenBackground ?? this.lockWhenBackground,
         lockGraceSeconds: lockGraceSeconds ?? this.lockGraceSeconds,
-        lockPinLength: lockPinLength ?? this.lockPinLength,
+        lockPinLength: lockPinLength == null ? this.lockPinLength : AppSettings.clampPinLength(lockPinLength),
         lockAutoUnlock: lockAutoUnlock ?? this.lockAutoUnlock,
         secureScreen: secureScreen ?? this.secureScreen,
         encryptBackupsByDefault: encryptBackupsByDefault ?? this.encryptBackupsByDefault,

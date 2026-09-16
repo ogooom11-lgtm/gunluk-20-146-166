@@ -5,6 +5,8 @@ import 'package:gunluk/data/app_state.dart';
 import 'package:gunluk/theme/app_theme.dart';
 import 'package:gunluk/ui/app_scope.dart';
 import 'package:gunluk/ui/screens/lock_screen.dart';
+import 'package:gunluk/ui/widgets/pin_pad.dart';
+import 'package:gunluk/ui/widgets/pin_sheet.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 AppState _state() {
@@ -230,6 +232,138 @@ void main() {
       }
 
       expect(app.locked, isFalse, reason: 'الرمز بعد الحذف صار 4821');
+      await tester.pumpWidget(const SizedBox.shrink());
+      app.dispose();
+    });
+
+    testWidgets('الترتيب من اليسار: ١ أقصى اليسار و٣ على يمينه', (WidgetTester tester) async {
+      final AppState app = await _lockedApp();
+
+      await tester.pumpWidget(_harness(app));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      final double one = tester.getCenter(find.byKey(const ValueKey<String>('pin_key_1'))).dx;
+      final double three = tester.getCenter(find.byKey(const ValueKey<String>('pin_key_3'))).dx;
+      expect(one, lessThan(three), reason: '١ يبدأ من اليسار');
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      app.dispose();
+    });
+
+    testWidgets('زر كيبورد الجهاز متاح ويكتب الرمز ويفتح', (WidgetTester tester) async {
+      final AppState app = await _lockedApp();
+
+      await tester.pumpWidget(_harness(app));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      await tester.tap(find.text('كيبورد الجهاز'));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.byKey(const ValueKey<String>('pin_keyboard_field')), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('pin_key_1')), findsNothing, reason: 'لوحة الأرقام اختفت');
+
+      await tester.enterText(find.byKey(const ValueKey<String>('pin_keyboard_field')), '1234');
+      for (int i = 0; i < 8; i++) {
+        await tester.pump(const Duration(milliseconds: 120));
+      }
+
+      expect(app.locked, isFalse, reason: 'كُتب الرمز من الكيبورد وفُتح');
+      await tester.pumpWidget(const SizedBox.shrink());
+      app.dispose();
+    });
+
+    testWidgets('لا يُذكر «بصمة كلمة السر» تحت الشاشة', (WidgetTester tester) async {
+      final AppState app = await _lockedApp();
+
+      await tester.pumpWidget(_harness(app));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.textContaining('بصمة'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+      app.dispose();
+    });
+  });
+
+  group('كلمة مرور طويلة حتى ٦٤ خانة', () {
+    testWidgets('٦٤ خانة تُقبل على لوحة الأرقام', (WidgetTester tester) async {
+      final String pin64 = List<String>.generate(64, (int i) => '${i % 10}').join();
+      final AppState app = await _lockedApp(pin: pin64, length: 64);
+
+      await tester.pumpWidget(_harness(app));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // ٦٤ نقطة موزّعة على صفوف (١٦ في الصف).
+      expect(PinDots.perRowFor(64), 16);
+      expect(PinDots.dotSizeFor(64, 18), lessThan(18));
+
+      final String prefix = pin64.substring(0, 60);
+      await _tapDigits(tester, prefix);
+      expect(app.locked, isTrue, reason: 'لم يكتمل الطول بعد');
+      await _tapDigits(tester, pin64.substring(60));
+      for (int i = 0; i < 8; i++) {
+        await tester.pump(const Duration(milliseconds: 120));
+      }
+
+      expect(app.locked, isFalse, reason: 'فُتح بكلمة مرور من ٦٤ رقمًا');
+      await tester.pumpWidget(const SizedBox.shrink());
+      app.dispose();
+    });
+
+    test('الطول يُضبط بين ٤ و٦٤', () {
+      expect(AppSettings.clampPinLength(0), 0, reason: '٠ = رمز قديم نصّي');
+      expect(AppSettings.clampPinLength(2), 4);
+      expect(AppSettings.clampPinLength(4), 4);
+      expect(AppSettings.clampPinLength(37), 37);
+      expect(AppSettings.clampPinLength(64), 64);
+      expect(AppSettings.clampPinLength(200), 64);
+    });
+
+    test('يُحفظ ويُقرأ الحد الأقصى ٦٤ من الإعدادات', () async {
+      final AppState app = _state();
+      await app.init();
+      await app.updateLockOptions(pinLength: 100);
+      expect(app.settings.lockPinLength, 64);
+
+      final AppSettings back = AppSettings.fromJson(app.settings.toJson());
+      expect(back.lockPinLength, 64);
+    });
+
+    testWidgets('ورقة اختيار الطول تعرض الخيارات حتى ٦٤ وتعيد المختار', (WidgetTester tester) async {
+      final AppState app = await _lockedApp();
+      int? picked;
+      // النطاق مطلوب لأن الورقة تقرأ كثافة الواجهة من الإعدادات.
+      await tester.pumpWidget(
+        AppScope(
+          state: app,
+          child: MaterialApp(
+            theme: AppTheme.light(app.settings),
+            locale: const Locale('ar'),
+            home: Builder(
+              builder: (BuildContext context) => Scaffold(
+                body: Center(
+                  child: TextButton(
+                    onPressed: () async {
+                      picked = await showPinLengthSheet(context, current: 4);
+                    },
+                    child: const Text('فتح'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('فتح'));
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(find.text('4'), findsOneWidget);
+      expect(find.text('64'), findsOneWidget);
+
+      await tester.tap(find.text('64'));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(picked, 64);
+
       await tester.pumpWidget(const SizedBox.shrink());
       app.dispose();
     });

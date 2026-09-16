@@ -11,6 +11,9 @@ import '../app_scope.dart';
 enum PinState { idle, verifying, error, success }
 
 /// صفّ نقاط الرمز: نقطة لكل رقم، تتعبّأ بحركة مرنة.
+///
+/// - الرموز الطويلة (حتى ٦٤ رقمًا) تُعرض بعدة صفوف مع تصغير النقاط.
+/// - الترتيب من اليسار لليمين ليطابق لوحة الأرقام.
 class PinDots extends StatelessWidget {
   const PinDots({
     super.key,
@@ -40,37 +43,62 @@ class PinDots extends StatelessWidget {
     }
   }
 
+  /// كم نقطة في الصف الواحد حسب الطول.
+  static int perRowFor(int length) => length <= 8 ? length : (length <= 20 ? 10 : 16);
+
+  /// حجم النقطة المناسب للطول (تصغر كلما طال الرمز).
+  static double dotSizeFor(int length, double base) {
+    if (length <= 8) return base;
+    if (length <= 20) return base * 0.8;
+    return base * 0.6;
+  }
+
   @override
   Widget build(BuildContext context) {
     final Color color = _color(context);
     final bool dim = state == PinState.verifying;
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: <Widget>[
-        for (int i = 0; i < length; i++)
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: spacing / 2),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeOutBack,
-              width: dotSize,
-              height: dotSize,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: i < filled ? color.withAlpha(dim ? 130 : 255) : Colors.transparent,
-                border: Border.all(
-                  color: i < filled ? color : color.withAlpha(90),
-                  width: 2.1,
-                ),
-                boxShadow: i < filled
-                    ? <BoxShadow>[
-                        BoxShadow(color: color.withAlpha(70), blurRadius: 10, spreadRadius: 1),
-                      ]
-                    : null,
+    final int perRow = perRowFor(length);
+    final double size = dotSizeFor(length, dotSize);
+    final List<Widget> dots = <Widget>[
+      for (int i = 0; i < length; i++)
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: spacing / 2, vertical: spacing / 4),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutBack,
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: i < filled ? color.withAlpha(dim ? 130 : 255) : Colors.transparent,
+              border: Border.all(
+                color: i < filled ? color : color.withAlpha(90),
+                width: 2.1,
               ),
+              boxShadow: i < filled
+                  ? <BoxShadow>[
+                      BoxShadow(color: color.withAlpha(70), blurRadius: 10, spreadRadius: 1),
+                    ]
+                  : null,
             ),
           ),
-      ],
+        ),
+    ];
+    if (length <= perRow) {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        textDirection: TextDirection.ltr,
+        children: dots,
+      );
+    }
+    // رمز طويل: نقاط بعدة صفوف داخل عرض محدود بدل صف واحد يفيض.
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: perRow * (size + spacing)),
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        textDirection: TextDirection.ltr,
+        children: dots,
+      ),
     );
   }
 }
@@ -180,6 +208,8 @@ class _PinKeyState extends State<PinKey> {
 }
 
 /// لوحة أرقام مخصّصة (1-9 ثم [تأكيد/فراغ] 0 [حذف]).
+///
+/// الترتيب من اليسار لليمين دائمًا: ١ في أقصى اليسار حتى مع واجهة عربية.
 class PinPad extends StatelessWidget {
   const PinPad({
     super.key,
@@ -218,6 +248,7 @@ class PinPad extends StatelessWidget {
             padding: EdgeInsets.only(bottom: spacing),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
+              textDirection: TextDirection.ltr,
               children: <Widget>[
                 for (final String digit in row)
                   Padding(
@@ -238,6 +269,7 @@ class PinPad extends StatelessWidget {
           ),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
+          textDirection: TextDirection.ltr,
           children: <Widget>[
             SizedBox(
               width: keySize,

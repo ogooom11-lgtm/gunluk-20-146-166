@@ -213,23 +213,10 @@ class SecurityScreen extends StatelessWidget {
     _toast(context, context.tr('security.lockRemoved'));
   }
 
-  /// تعديل عدد أرقام الرمز (يعمل مع الرمز الحالي مباشرة).
+  /// تعديل طول كلمة المرور (من ٤ إلى ٦٤ خانة) — يعمل مع الرمز الحالي مباشرة.
   Future<void> _editPinLength(BuildContext context) async {
     final app = context.appRead;
-    final int? picked = await showChoiceSheet<int>(
-      context,
-      title: context.tr('security.pinLength'),
-      subtitle: context.tr('security.pinLengthDesc'),
-      value: _pinLengthOf(context),
-      options: <ChoiceItem<int>>[
-        for (final int n in <int>[4, 5, 6, 7, 8])
-          ChoiceItem<int>(
-            value: n,
-            label: context.tr('security.pinLengthValue', <String, String>{'n': context.numStr(n)}),
-            icon: Icons.pin_rounded,
-          ),
-      ],
-    );
+    final int? picked = await showPinLengthSheet(context, current: _pinLengthOf(context));
     if (picked == null) return;
     await app.updateLockOptions(pinLength: picked);
   }
