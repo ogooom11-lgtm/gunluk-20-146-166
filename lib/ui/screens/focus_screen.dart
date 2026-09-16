@@ -102,7 +102,6 @@ class _FocusScreenState extends State<FocusScreen> {
     final bool isBreak = running && app.focusIsBreak;
     final Task? task = _linkedTask(context);
 
-    final int total = running ? app.focusTotalSeconds : _minutes * 60;
     final int remaining = running ? app.focusRemainingSeconds : _minutes * 60;
     final double progress = running ? app.focusProgress : 0;
     final int elapsed = running ? app.focusElapsedSeconds : 0;
