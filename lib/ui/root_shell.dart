@@ -10,6 +10,7 @@ import 'app_scope.dart';
 import 'screens/calendar_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/events_screen.dart';
+import 'screens/focus_screen.dart';
 import 'screens/lock_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/plans_screen.dart';
@@ -87,6 +88,14 @@ class _RootShellState extends State<RootShell> {
       if (payload.op == 'task' && payload.taskId != null) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) showTaskDetailsSheet(context, payload.taskId!);
+        });
+      } else if (payload.op == 'focus') {
+        // إشعار جلسة التركيز: نفتح المؤقّت مباشرة.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const FocusScreen()),
+          );
         });
       } else if (payload.day != null) {
         final DateTime? day = Dates.parseKey(payload.day);

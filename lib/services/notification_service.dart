@@ -453,6 +453,102 @@ class NotificationService {
     } catch (_) {}
   }
 
+  // ===== إشعار مؤقّت التركيز (دائم + شريط تقدّم + عدّاد وقت حقيقي) =====
+
+  /// معرّف قناة مؤقّت التركيز (صامتة، بلا اهتزاز).
+  String _focusChannelId(AppSettings settings) => 'injaz_focus_${settings.channelVersion}';
+
+  /// قناة التركيز: أهمية منخفضة وبلا صوت حتى لا تُزعج عند كل تحديث للتقدّم.
+  Future<void> ensureFocusChannel(AppSettings settings, AppLocalizations l10n) async {
+    final AndroidFlutterLocalNotificationsPlugin? android = _android;
+    if (android == null) return;
+    try {
+      await android.createNotificationChannel(
+        AndroidNotificationChannel(
+          _focusChannelId(settings),
+          l10n.t('focus.notifChannelName'),
+          description: l10n.t('focus.notifChannelDesc'),
+          importance: Importance.low,
+          playSound: false,
+          enableVibration: false,
+          showBadge: false,
+        ),
+      );
+    } catch (_) {}
+  }
+
+  /// يعرض/يحدّث إشعار الجلسة الجارية: شريط تقدّم + الوقت المتبقي + وقت الانتهاء.
+  ///
+  /// عند التشغيل نُفعّل «العدّاد الزمني» في النظام (usesChronometer) كي يستمر
+  /// الوقت بالتناقص على الشاشة حتى لو جُمّد التطبيق في الخلفية.
+  Future<bool> showFocusProgress({
+    required int id,
+    required String title,
+    required String body,
+    required int elapsedSeconds,
+    required int totalSeconds,
+    required AppSettings settings,
+    required AppLocalizations l10n,
+    DateTime? endsAt,
+    bool paused = false,
+    Color? accent,
+    String? payload,
+  }) async {
+    try {
+      if (!_initialized) await init();
+      await ensureFocusChannel(settings, l10n);
+    } catch (_) {}
+    final int max = totalSeconds < 1 ? 1 : totalSeconds;
+    final int value = elapsedSeconds.clamp(0, max);
+    try {
+      await _plugin.show(
+        id,
+        title,
+        body,
+        NotificationDetails(
+          android: AndroidNotificationDetails(
+            _focusChannelId(settings),
+            l10n.t('focus.notifChannelName'),
+            channelDescription: l10n.t('focus.notifChannelDesc'),
+            icon: statusIcon,
+            importance: Importance.low,
+            priority: Priority.low,
+            color: accent,
+            playSound: false,
+            enableVibration: false,
+            silent: true,
+            ongoing: true,
+            autoCancel: false,
+            onlyAlertOnce: true,
+            showWhen: !paused && endsAt != null,
+            when: paused ? null : endsAt?.millisecondsSinceEpoch,
+            usesChronometer: !paused && endsAt != null,
+            chronometerCountDown: !paused && endsAt != null,
+            showProgress: true,
+            maxProgress: max,
+            progress: value,
+            category: AndroidNotificationCategory.stopwatch,
+            styleInformation: BigTextStyleInformation(body, contentTitle: title),
+            subText: l10n.t('app.name'),
+            colorized: false,
+            visibility: NotificationVisibility.public,
+          ),
+        ),
+        payload: payload,
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// يُخفي إشعار مؤقّت التركيز.
+  Future<void> cancelFocusProgress(int id) async {
+    try {
+      await _plugin.cancel(id);
+    } catch (_) {}
+  }
+
   Future<void> cancelAll() async {
     try {
       await _plugin.cancelAll();

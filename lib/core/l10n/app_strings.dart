@@ -505,6 +505,18 @@ class L {
     'focus.keepGoing': 'استمر — أنت قريب من الإنجاز',
     'focus.inProgress': 'جلسة تركيز جارية',
     'focus.notifDone': 'انتهت جلسة التركيز ✨',
+    'focus.notifRemaining': 'المتبقي {t}',
+    'focus.notifEndsAt': 'ينتهي {time}',
+    'focus.notifPaused': 'متوقّف مؤقتًا · المتبقي {t}',
+    'focus.notifBreakRunning': 'وقت راحة',
+    'focus.notifChannelName': 'مؤقّت التركيز',
+    'focus.notifChannelDesc': 'إشعار دائم بشريط تقدّم ووقت الجلسة',
+    'focus.keepsRunning': 'المؤقّت يستمر إذا خرجت من الشاشة أو من التطبيق، وتجد الوقت المتبقي في إشعار بشريط تقدّم.',
+    'focus.runningHint': 'الجلسة تعمل الآن في الخلفية — ارجع في أي وقت لمتابعتها.',
+    'focus.open': 'فتح المؤقّت',
+    'focus.elapsed': 'مضى {t}',
+    'focus.breakRecorded': 'الراحة لا تُحتسب ضمن دقائق التركيز.',
+
 
     // ===== البحث =====
     'search.title': 'البحث',
@@ -1203,6 +1215,18 @@ class L {
     'focus.keepGoing': 'Keep going — you are close',
     'focus.inProgress': 'Focus session running',
     'focus.notifDone': 'Focus session finished ✨',
+    'focus.notifRemaining': '{t} left',
+    'focus.notifEndsAt': 'Ends at {time}',
+    'focus.notifPaused': 'Paused · {t} left',
+    'focus.notifBreakRunning': 'Break time',
+    'focus.notifChannelName': 'Focus timer',
+    'focus.notifChannelDesc': 'Ongoing notification with a progress bar and the session time',
+    'focus.keepsRunning': 'The timer keeps running when you leave the screen or the app — the time left stays in a notification with a progress bar.',
+    'focus.runningHint': 'The session is running in the background — come back anytime to follow it.',
+    'focus.open': 'Open timer',
+    'focus.elapsed': '{t} elapsed',
+    'focus.breakRecorded': 'Break time is not counted towards focus minutes.',
+
 
     // ===== Search =====
     'search.title': 'Search',

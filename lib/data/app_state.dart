@@ -32,11 +32,16 @@ class AppState extends ChangeNotifier {
     AppRepository? repository,
     NotificationService? notifications,
     this.useIsolates = true,
+    DateTime Function()? clock,
   })  : repo = repository ?? AppRepository(),
-        notifications = notifications ?? NotificationService.instance;
+        notifications = notifications ?? NotificationService.instance,
+        clock = clock ?? DateTime.now;
 
   /// تنفيذ مهام التشفير في عزلة منفصلة (يُعطّل في الاختبارات لتبقى متزامنة).
   final bool useIsolates;
+
+  /// مصدر الوقت الحالي (قابل للحقن في الاختبارات).
+  final DateTime Function() clock;
 
   final AppRepository repo;
   final NotificationService notifications;
@@ -58,6 +63,72 @@ class AppState extends ChangeNotifier {
 
   /// هل التطبيق مقفل الآن بانتظار كلمة السر؟
   bool locked = false;
+
+  // ===== مؤقّت التركيز (يعمل خارج الشاشة وفي الخلفية) =====
+
+  /// هل هناك جلسة تركيز جارية (تشغيل أو إيقاف مؤقت)؟
+  bool focusRunning = false;
+
+  /// هل الجلسة متوقّفة مؤقتًا؟
+  bool focusPaused = false;
+
+  /// مدة الجلسة كاملة بالثواني.
+  int focusTotalSeconds = 0;
+
+  /// لحظة بدء الجلسة الحالية (تُحفظ لتسجيل وقت الجلسة).
+  DateTime? focusStartedAt;
+
+  /// لحظة نهاية الجلسة (null عند الإيقاف المؤقت).
+  DateTime? focusEndsAt;
+
+  /// الثواني المتبقية عند الإيقاف المؤقت.
+  int focusPausedRemaining = 0;
+
+  /// المهمة المرتبطة بالجلسة (إن وُجدت).
+  String? focusTaskId;
+
+  /// عنوان الجلسة (اسم المهمة أو فراغ).
+  String focusLabel = '';
+
+  /// هل الجلسة راحة (لا تُحتسب ضمن دقائق التركيز)؟
+  bool focusIsBreak = false;
+
+  /// عدد الجلسات المكتملة (تستهلكه الشاشة لعرض تهنئة مرة واحدة).
+  int focusCompletedCount = 0;
+
+  /// معرّف الإشعار الدائم (شريط التقدّم) في نظام الإشعارات.
+  static const int focusNotifId = 900001;
+
+  /// معرّف إشعار انتهاء الجلسة الاحتياطي.
+  static const int focusDoneNotifId = 900002;
+
+  Timer? _focusTimer;
+  int _focusNoticeTick = 0;
+
+  /// الثواني المتبقية في الجلسة الحالية (محسوبة من الساعة لا من عدّاد).
+  int get focusRemainingSeconds {
+    if (!focusRunning) return 0;
+    if (focusPaused) return focusPausedRemaining;
+    final DateTime? end = focusEndsAt;
+    if (end == null) return 0;
+    final int seconds = end.difference(clock()).inSeconds;
+    return seconds < 0 ? 0 : seconds;
+  }
+
+  /// الثواني المنقضية من الجلسة.
+  int get focusElapsedSeconds {
+    final int remaining = focusRemainingSeconds;
+    final int elapsed = focusTotalSeconds - remaining;
+    return elapsed < 0 ? 0 : elapsed;
+  }
+
+  /// نسبة إنجاز الجلسة (0..1).
+  double get focusProgress {
+    if (focusTotalSeconds <= 0) return 0;
+    return (focusElapsedSeconds / focusTotalSeconds).clamp(0.0, 1.0);
+  }
+
+  Duration get focusRemaining => Duration(seconds: focusRemainingSeconds);
 
   /// وقت آخر انتقال للخلفية (لحساب مهلة السماح).
   DateTime? _backgroundedAt;
@@ -102,6 +173,8 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     await applySecurityFlags();
     await initNotifications();
+    // استرجاع جلسة تركيز كانت جارية قبل إغلاق التطبيق.
+    await _restoreFocus();
     await rebuildReminders(immediate: true);
     await refreshSystemNotificationState();
   }
@@ -141,6 +214,31 @@ class AppState extends ChangeNotifier {
       if (value is num) _notifIds[key] = value.toInt();
     });
     _notifSeq = (data['notifSeq'] as num?)?.toInt() ?? 1000;
+    _loadFocusTimer(AppRepository.map(data['focusTimer']));
+  }
+
+  void _loadFocusTimer(Map<String, dynamic> json) {
+    if (json.isEmpty) {
+      _clearFocus();
+      return;
+    }
+    final int total = (json['total'] as num?)?.toInt() ?? 0;
+    if (total <= 0) {
+      _clearFocus();
+      return;
+    }
+    focusTotalSeconds = total;
+    focusStartedAt = DateTime.tryParse((json['started'] ?? '').toString());
+    focusEndsAt = DateTime.tryParse((json['ends'] ?? '').toString());
+    focusPaused = json['paused'] == true;
+    focusPausedRemaining = (json['prem'] as num?)?.toInt() ?? 0;
+    focusTaskId = json['task']?.toString();
+    focusLabel = (json['label'] ?? '').toString();
+    focusIsBreak = json['brk'] == true;
+    focusRunning = true;
+    _focusTimer?.cancel();
+    _focusTimer = null;
+    _focusNoticeTick = 0;
   }
 
   Map<String, dynamic> exportData() => <String, dynamic>{
@@ -156,6 +254,18 @@ class AppState extends ChangeNotifier {
         'badges': badges.map((String key, DateTime v) => MapEntry<String, String>(key, v.toIso8601String())),
         'notifIds': _notifIds,
         'notifSeq': _notifSeq,
+        'focusTimer': focusRunning
+            ? <String, dynamic>{
+                'total': focusTotalSeconds,
+                'started': focusStartedAt?.toIso8601String(),
+                'ends': focusEndsAt?.toIso8601String(),
+                'paused': focusPaused,
+                'prem': focusPausedRemaining,
+                'task': focusTaskId,
+                'label': focusLabel,
+                'brk': focusIsBreak,
+              }
+            : null,
       };
 
   String exportJson() => const JsonEncoder.withIndent('  ').convert(exportData());
@@ -542,7 +652,7 @@ class AppState extends ChangeNotifier {
       sessions.where((FocusSession s) => Dates.sameDay(s.start, day)).toList();
 
   int get focusMinutesToday =>
-      sessionsOn(DateTime.now()).fold(0, (int sum, FocusSession s) => sum + s.minutes);
+      sessionsOn(clock()).fold(0, (int sum, FocusSession s) => sum + s.minutes);
 
   int get focusMinutesTotal => sessions.fold(0, (int sum, FocusSession s) => sum + s.minutes);
 
@@ -550,13 +660,240 @@ class AppState extends ChangeNotifier {
     if (minutes <= 0) return;
     sessions.add(FocusSession(
       id: Ids.next('fs'),
-      start: DateTime.now(),
+      start: clock(),
       minutes: minutes,
       taskId: taskId,
       label: label,
     ));
     _evaluateBadges();
     markDirty();
+  }
+
+  // ===== إدارة مؤقّت التركيز =====
+
+  /// يبدأ جلسة تركيز جديدة بالمدة المعطاة (بالدقائق).
+  Future<void> startFocus(
+    int minutes, {
+    String? taskId,
+    String label = '',
+    bool isBreak = false,
+  }) async {
+    final int seconds = (minutes <= 0 ? 1 : minutes) * 60;
+    focusTotalSeconds = seconds;
+    focusStartedAt = clock();
+    focusEndsAt = clock().add(Duration(seconds: seconds));
+    focusPaused = false;
+    focusPausedRemaining = 0;
+    focusRunning = true;
+    focusIsBreak = isBreak;
+    focusTaskId = taskId;
+    focusLabel = label;
+    _focusNoticeTick = 0;
+    _startFocusTicker();
+    markDirty();
+    await _refreshFocusNotification(force: true);
+  }
+
+  /// إيقاف مؤقت مع الاحتفاظ بالوقت المتبقي.
+  Future<void> pauseFocus() async {
+    if (!focusRunning || focusPaused) return;
+    focusPausedRemaining = focusRemainingSeconds;
+    focusPaused = true;
+    focusEndsAt = null;
+    markDirty();
+    await _refreshFocusNotification(force: true);
+  }
+
+  /// متابعة الجلسة من حيث توقّفت.
+  Future<void> resumeFocus() async {
+    if (!focusRunning || !focusPaused) return;
+    focusEndsAt = clock().add(Duration(seconds: focusPausedRemaining));
+    focusPaused = false;
+    focusPausedRemaining = 0;
+    _startFocusTicker();
+    markDirty();
+    await _refreshFocusNotification(force: true);
+  }
+
+  /// إنهاء الجلسة يدويًا — يُسجَّل الوقت المنقضي إن بلغ دقيقة على الأقل.
+  Future<void> stopFocus() async {
+    if (!focusRunning) return;
+    final int elapsed = focusElapsedSeconds;
+    final String? taskId = focusTaskId;
+    final String label = focusLabel;
+    final bool isBreak = focusIsBreak;
+    _clearFocus();
+    markDirty();
+    await notifications.cancel(focusNotifId);
+    if (!isBreak && elapsed >= 60) {
+      await addFocusSession(elapsed ~/ 60, taskId: taskId, label: label);
+    }
+  }
+
+  void _clearFocus() {
+    _focusTimer?.cancel();
+    _focusTimer = null;
+    focusRunning = false;
+    focusPaused = false;
+    focusTotalSeconds = 0;
+    focusEndsAt = null;
+    focusPausedRemaining = 0;
+    focusStartedAt = null;
+    focusTaskId = null;
+    focusLabel = '';
+    focusIsBreak = false;
+    _focusNoticeTick = 0;
+  }
+
+  void _startFocusTicker() {
+    _focusTimer?.cancel();
+    _focusTimer = Timer.periodic(const Duration(seconds: 1), (_) => _focusTick());
+  }
+
+  void _focusTick() {
+    if (!focusRunning) {
+      _clearFocus();
+      return;
+    }
+    if (focusPaused) return;
+    if (focusRemainingSeconds <= 0) {
+      unawaited(_completeFocus());
+      return;
+    }
+    _focusNoticeTick++;
+    notifyListeners();
+    // تحديث شريط التقدّم كل ٥ ثوانٍ فقط (تحديث كل ثانية يُخنق في النظام).
+    if (_focusNoticeTick % 5 == 0) unawaited(_refreshFocusNotification());
+  }
+
+  /// انتهاء الجلسة: يُسجَّل الوقت وتظهر تهيئة + إشعار.
+  Future<void> _completeFocus() async {
+    final int minutes = (focusTotalSeconds / 60).round().clamp(1, 24 * 60);
+    final String? taskId = focusTaskId;
+    final String label = focusLabel;
+    final bool isBreak = focusIsBreak;
+    _clearFocus();
+    focusCompletedCount++;
+    markDirty();
+    await notifications.cancel(focusNotifId);
+    if (isBreak) {
+      notifyListeners();
+      return;
+    }
+    await addFocusSession(minutes, taskId: taskId, label: label);
+    final AppLocalizations l10n = this.l10n;
+    await notifications.init(onTap: _handleNotificationTap);
+    // إلغاء الإشعار الاحتياطي المجدول قبل عرض إشعار الانتهاء (نفس المعرّف).
+    await notifications.cancel(focusDoneNotifId);
+    await notifications.showInstant(
+      id: focusDoneNotifId,
+      title: l10n.t('focus.notifDone'),
+      body: l10n.t('focus.wellDone', <String, String>{
+        't': DateNames.duration(minutes, l10n.lang, arabicDigits: settings.arabicDigits),
+      }),
+      settings: settings,
+      l10n: l10n,
+      kind: ReminderKind.task,
+      accent: AppTheme.palette(settings).accent,
+    );
+    notifyListeners();
+  }
+
+  /// نص الإشعار الدائم: الوقت المتبقي + وقت الانتهاء.
+  String _focusNotificationBody(AppLocalizations l10n) {
+    final String remaining = DateNames.duration(
+      (focusRemainingSeconds / 60).ceil(),
+      l10n.lang,
+      arabicDigits: settings.arabicDigits,
+    );
+    if (focusPaused) {
+      return l10n.t('focus.notifPaused', <String, String>{'t': remaining});
+    }
+    final DateTime? end = focusEndsAt;
+    final String ends = end == null
+        ? ''
+        : l10n.t('focus.notifEndsAt', <String, String>{
+            'time': DateNames.time(end.hour * 60 + end.minute,
+                use24: settings.use24Hour, lang: l10n.lang, arabicDigits: settings.arabicDigits),
+          });
+    final String left = l10n.t('focus.notifRemaining', <String, String>{'t': remaining});
+    return ends.isEmpty ? left : '$left · $ends';
+  }
+
+  /// يعرض/يحدّث إشعار الجلسة الجارية (شريط تقدّم + وقت).
+  Future<void> _refreshFocusNotification({bool force = false}) async {
+    if (!focusRunning) {
+      await notifications.cancelFocusProgress(focusNotifId);
+      return;
+    }
+    if (!force && _focusNoticeTick % 5 != 0) return;
+    final AppLocalizations l10n = this.l10n;
+    final String title = focusLabel.isEmpty
+        ? l10n.t(focusIsBreak ? 'focus.notifBreakRunning' : 'focus.inProgress')
+        : focusLabel;
+    await notifications.showFocusProgress(
+      id: focusNotifId,
+      title: title,
+      body: _focusNotificationBody(l10n),
+      elapsedSeconds: focusElapsedSeconds,
+      totalSeconds: focusTotalSeconds,
+      settings: settings,
+      l10n: l10n,
+      endsAt: focusEndsAt,
+      paused: focusPaused,
+      accent: AppTheme.palette(settings).accent,
+      // الضغط على إشعار الجلسة يفتح شاشة المؤقّت.
+      payload: NotifPayload(op: 'focus', kind: ReminderKind.task.name).encode(),
+    );
+  }
+
+  /// استرجاع جلسة كانت جارية قبل إغلاق التطبيق.
+  Future<void> _restoreFocus() async {
+    if (!focusRunning) return;
+    if (focusTotalSeconds <= 0) {
+      _clearFocus();
+      return;
+    }
+    if (focusPaused) {
+      _focusNoticeTick = 0;
+      await _refreshFocusNotification(force: true);
+      return;
+    }
+    final DateTime? end = focusEndsAt;
+    if (end == null) {
+      _clearFocus();
+      return;
+    }
+    if (!end.isAfter(clock())) {
+      // انتهت الجلسة أثناء غيابك: نُسجّل الوقت كاملًا دون إشعار مكرّر.
+      final int minutes = (focusTotalSeconds / 60).round().clamp(1, 24 * 60);
+      final String? taskId = focusTaskId;
+      final String label = focusLabel;
+      final bool isBreak = focusIsBreak;
+      _clearFocus();
+      focusCompletedCount++;
+      markDirty();
+      if (isBreak) return;
+      await addFocusSession(minutes, taskId: taskId, label: label);
+      // إن كانت الجلسة انتهت قبل قليل، نُظهر الإشعار (نفس معرّف الاحتياطي،
+      // فإن كان قد ظهر فعلًا يُحدَّث بدل أن يتكرّر).
+      if (clock().difference(end).inMinutes <= 10) {
+        await notifications.showInstant(
+          id: focusDoneNotifId,
+          title: l10n.t('focus.notifDone'),
+          body: l10n.t('focus.wellDone', <String, String>{
+            't': DateNames.duration(minutes, l10n.lang, arabicDigits: settings.arabicDigits),
+          }),
+          settings: settings,
+          l10n: l10n,
+          kind: ReminderKind.task,
+          accent: AppTheme.palette(settings).accent,
+        );
+      }
+      return;
+    }
+    _startFocusTicker();
+    await _refreshFocusNotification(force: true);
   }
 
   // ===== إحصاءات =====
@@ -701,6 +1038,24 @@ class AppState extends ChangeNotifier {
       categoryName: categoryName,
       windowDays: 16,
     );
+    // تذكير انتهاء جلسة التركيز: يُجدول كإشعار عادي حتى يصل وقتها حتى لو
+    // أُغلق التطبيق بالكامل (sync يلغي كل الإشعارات ثم يعيد الجدولة).
+    final DateTime? focusEnd = focusEndsAt;
+    if (focusRunning && !focusPaused && focusEnd != null && focusEnd.isAfter(DateTime.now())) {
+      final int minutes = (focusTotalSeconds / 60).round().clamp(1, 24 * 60);
+      planned.add(PlannedReminder(
+        id: focusDoneNotifId,
+        key: 'focus:done',
+        when: focusEnd,
+        kind: ReminderKind.task,
+        title: l10n.t('focus.notifDone'),
+        body: l10n.t('focus.wellDone', <String, String>{
+          't': DateNames.duration(minutes, l10n.lang, arabicDigits: settings.arabicDigits),
+        }),
+        withActions: false,
+      ));
+      planned.sort((PlannedReminder a, PlannedReminder b) => a.when.compareTo(b.when));
+    }
     _planned = planned;
     nextReminderAt = planned.isEmpty ? null : planned.first.when;
     try {
@@ -711,6 +1066,8 @@ class AppState extends ChangeNotifier {
         accent: AppTheme.palette(settings).accent,
       );
     } catch (_) {}
+    // sync يلغي كل الإشعارات المعروضة، فنُعيد إظهار إشعار الجلسة الجارية.
+    if (focusRunning) await _refreshFocusNotification(force: true);
     _dirty = true;
     notifyListeners();
   }
@@ -968,6 +1325,8 @@ class AppState extends ChangeNotifier {
     if (lockEnabled && settings.lockWhenBackground && settings.lockGraceSeconds <= 0) {
       locked = true;
     }
+    // آخر تحديث لإشعار جلسة التركيز قبل تجميد التطبيق في الخلفية.
+    if (focusRunning) unawaited(_refreshFocusNotification(force: true));
     notifyListeners();
   }
 
@@ -983,6 +1342,15 @@ class AppState extends ChangeNotifier {
     if (at != null && settings.lockWhenBackground) {
       final int away = DateTime.now().difference(at).inSeconds;
       if (away >= settings.lockGraceSeconds) locked = true;
+    }
+    // الجلسة قد تكون انتهت أثناء غيابنا — نُحدّث الحالة والإشعار.
+    if (focusRunning) {
+      if (!focusPaused && focusRemainingSeconds <= 0) {
+        unawaited(_completeFocus());
+      } else {
+        if (!focusPaused) _startFocusTicker();
+        unawaited(_refreshFocusNotification(force: true));
+      }
     }
     notifyListeners();
   }
@@ -1049,6 +1417,8 @@ class AppState extends ChangeNotifier {
     events = <DayEvent>[];
     sessions = <FocusSession>[];
     locked = false;
+    _clearFocus();
+    focusCompletedCount = 0;
     badges.clear();
     _notifIds.clear();
     _planned = <PlannedReminder>[];
@@ -1060,5 +1430,13 @@ class AppState extends ChangeNotifier {
     await repo.reload();
     await applyPendingOps(silent: true);
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _focusTimer?.cancel();
+    _saveTimer?.cancel();
+    _reminderTimer?.cancel();
+    super.dispose();
   }
 }

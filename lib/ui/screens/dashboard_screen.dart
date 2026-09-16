@@ -53,6 +53,10 @@ class DashboardScreen extends StatelessWidget {
               const SizedBox(height: 12),
             ],
             _progressCard(context, done: done, total: active.length, remainingMinutes: remainingMinutes),
+            if (app.focusRunning) ...<Widget>[
+              const SizedBox(height: 12),
+              _focusCard(context),
+            ],
             const SizedBox(height: 12),
             _statsRow(context, week),
             if (overdue.isNotEmpty) ...<Widget>[
@@ -190,6 +194,70 @@ class DashboardScreen extends StatelessWidget {
           tooltip: context.tr('badges.title'),
         ),
       ],
+    );
+  }
+
+  /// بطاقة جلسة التركيز الجارية — تظهر في الرئيسية وتفتح المؤقّت.
+  Widget _focusCard(BuildContext context) {
+    final app = context.app;
+    final bool paused = app.focusPaused;
+    final int remaining = app.focusRemainingSeconds;
+    final Color color = app.focusIsBreak ? const Color(0xFF2FA8A0) : context.palette.seed;
+    final String mm = (remaining ~/ 60).toString().padLeft(2, '0');
+    final String ss = (remaining % 60).toString().padLeft(2, '0');
+    return AppCard(
+      color: color.withAlpha(context.isDark ? 45 : 20),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => const FocusScreen()),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Icon(
+                app.focusIsBreak ? Icons.free_breakfast_rounded : Icons.timer_rounded,
+                color: color,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      app.focusLabel.isEmpty ? context.tr('focus.inProgress') : app.focusLabel,
+                      style: Theme.of(context).textTheme.titleSmall,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      context.tr(paused ? 'focus.notifPaused' : 'focus.notifRemaining', <String, String>{
+                        't': context.durStr((remaining / 60).ceil()),
+                      }),
+                      style: Theme.of(context).textTheme.labelSmall,
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                '${context.numStr(mm)}:${context.numStr(ss)}',
+                style: AppTheme.numeric(context, factor: 1.1),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: app.focusProgress.clamp(0.0, 1.0),
+              minHeight: 6,
+              backgroundColor: color.withAlpha(context.isDark ? 60 : 40),
+              valueColor: AlwaysStoppedAnimation<Color>(color),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
