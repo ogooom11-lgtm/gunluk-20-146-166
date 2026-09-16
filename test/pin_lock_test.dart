@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gunluk/core/models/app_settings.dart';
 import 'package:gunluk/data/app_state.dart';
 import 'package:gunluk/theme/app_theme.dart';
-import 'package:gunluk/theme/palettes.dart';
 import 'package:gunluk/ui/app_scope.dart';
 import 'package:gunluk/ui/screens/lock_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';

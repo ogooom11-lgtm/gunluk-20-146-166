@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 
 import '../../core/l10n/app_strings.dart';
 import '../app_scope.dart';
-import 'common.dart';
 
 /// حالة إدخال الرمز — تُستخدم لتلوين النقاط وتحريكها.
 enum PinState { idle, verifying, error, success }
@@ -68,53 +67,9 @@ class PinDots extends StatelessWidget {
                       ]
                     : null,
               ),
-              child: i < filled
-                  ? ScaleTransition(
-                      scale: _PopScale(i == filled - 1),
-                      child: const SizedBox.shrink(),
-                    )
-                  : null,
             ),
           ),
       ],
-    );
-  }
-}
-
-/// حركة «نبضة» بسيطة للنقطة الأخيرة عند الكتابة.
-class _PopScale extends StatefulWidget {
-  const _PopScale(this.active);
-  final bool active;
-
-  @override
-  State<_PopScale> createState() => _PopScaleState();
-}
-
-class _PopScaleState extends State<_PopScale> with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 260),
-  )..forward();
-
-  @override
-  void didUpdateWidget(covariant _PopScale oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.active && !oldWidget.active) _controller.forward(from: 0);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return ScaleTransition(
-      scale: Tween<double>(begin: 0.4, end: 1.0).animate(
-        CurvedAnimation(parent: _controller, curve: Curves.easeOutBack),
-      ),
-      child: const SizedBox.expand(),
     );
   }
 }

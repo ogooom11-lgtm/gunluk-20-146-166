@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 
 import '../../core/l10n/app_strings.dart';
 import '../app_scope.dart';
-import 'common.dart';
 import 'pin_pad.dart';
 
 /// وضع الورقة: تعيين رمز جديد (مع تأكيد) أو التحقق من الرمز الحالي.
