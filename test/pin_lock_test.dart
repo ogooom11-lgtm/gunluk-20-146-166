@@ -359,20 +359,26 @@ void main() {
       );
 
       await tester.tap(find.text('فتح'));
-      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
 
       expect(find.text('4'), findsOneWidget);
       expect(find.text('64'), findsOneWidget);
 
-      await tester.ensureVisible(find.text('64'));
+      // اختيار الطول الأقصى من الخيارات السريعة.
       await tester.tap(find.text('64'));
-      // ننتظر حركة إغلاق الورقة ثم إتمام المستقبل الذي يعيد القيمة.
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
-      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
       expect(picked, 64);
 
-      await tester.pumpWidget(const SizedBox.shrink());
+      // ثم الطول المخصّص: كتابة رقم وزر التأكيد.
+      picked = null;
+      await tester.tap(find.text('فتح'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '37');
+      await tester.pump();
+      await tester.tap(find.text('تأكيد'));
+      await tester.pumpAndSettle();
+      expect(picked, 37, reason: 'الطول المخصّص يُقبل حتى ٦٤');
+
       app.dispose();
     });
   });
