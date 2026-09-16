@@ -515,12 +515,10 @@ class _LockScreenState extends State<LockScreen> with SingleTickerProviderStateM
                     _kbMode ? Icons.dialpad_rounded : Icons.keyboard_alt_outlined,
                     size: 18,
                   ),
-                  label: Flexible(
-                    child: Text(
-                      context.tr(_kbMode ? 'security.usePad' : 'security.useKeyboard'),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                  label: Text(
+                    context.tr(_kbMode ? 'security.usePad' : 'security.useKeyboard'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),

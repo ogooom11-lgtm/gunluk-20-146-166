@@ -49,12 +49,23 @@ Widget _harness(AppState app) => AppScope(
       ),
     );
 
-/// يضغط أرقامًا على لوحة الأرقام المخصّصة.
+/// يضغط أرقامًا على لوحة الأرقام المخصّصة (مع التأكد أنها ظاهرة على الشاشة).
 Future<void> _tapDigits(WidgetTester tester, String digits) async {
   for (int i = 0; i < digits.length; i++) {
-    await tester.tap(find.byKey(ValueKey<String>('pin_key_${digits[i]}')));
+    final Finder key = find.byKey(ValueKey<String>('pin_key_${digits[i]}'));
+    await tester.ensureVisible(key);
+    await tester.tap(key);
     await tester.pump(const Duration(milliseconds: 60));
   }
+}
+
+/// يعرض شاشة القفل على مقاس هاتف واقعي ثم يستقرّ بعد حركة الدخول.
+Future<void> _pumpLock(WidgetTester tester, AppState app) async {
+  tester.view.physicalSize = const Size(1080, 2280);
+  tester.view.devicePixelRatio = 3;
+  addTearDown(tester.view.reset);
+  await tester.pumpWidget(_harness(app));
+  await tester.pump(const Duration(milliseconds: 300));
 }
 
 void main() {
@@ -147,8 +158,7 @@ void main() {
     testWidgets('نقاط بعدد أرقام الرمز ولوحة أرقام كاملة', (WidgetTester tester) async {
       final AppState app = await _lockedApp();
 
-      await tester.pumpWidget(_harness(app));
-      await tester.pump(const Duration(milliseconds: 300));
+      await _pumpLock(tester, app);
 
       for (final String digit in <String>['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']) {
         expect(find.byKey(ValueKey<String>('pin_key_$digit')), findsOneWidget);
@@ -164,8 +174,7 @@ void main() {
     testWidgets('الرمز الصحيح يفتح التطبيق تلقائيًا', (WidgetTester tester) async {
       final AppState app = await _lockedApp();
 
-      await tester.pumpWidget(_harness(app));
-      await tester.pump(const Duration(milliseconds: 300));
+      await _pumpLock(tester, app);
 
       await _tapDigits(tester, '1234');
       for (int i = 0; i < 6; i++) {
@@ -180,8 +189,7 @@ void main() {
     testWidgets('الرمز الخاطئ يُظهر رسالة خطأ ولا يفتح', (WidgetTester tester) async {
       final AppState app = await _lockedApp();
 
-      await tester.pumpWidget(_harness(app));
-      await tester.pump(const Duration(milliseconds: 300));
+      await _pumpLock(tester, app);
 
       await _tapDigits(tester, '9999');
       for (int i = 0; i < 8; i++) {
@@ -197,8 +205,7 @@ void main() {
     testWidgets('عند إيقاف الفتح التلقائي يظهر زر التأكيد ✓', (WidgetTester tester) async {
       final AppState app = await _lockedApp(autoUnlock: false);
 
-      await tester.pumpWidget(_harness(app));
-      await tester.pump(const Duration(milliseconds: 300));
+      await _pumpLock(tester, app);
 
       expect(find.byKey(const ValueKey<String>('pin_key_confirm')), findsOneWidget);
 
@@ -207,6 +214,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 200));
       expect(app.locked, isTrue, reason: 'ينتظر زر التأكيد');
 
+      await tester.ensureVisible(find.byKey(const ValueKey<String>('pin_key_confirm')));
       await tester.tap(find.byKey(const ValueKey<String>('pin_key_confirm')));
       for (int i = 0; i < 6; i++) {
         await tester.pump(const Duration(milliseconds: 120));
@@ -219,8 +227,7 @@ void main() {
     testWidgets('الحذف يتراجع رقمًا واحدًا', (WidgetTester tester) async {
       final AppState app = await _lockedApp(pin: '4821');
 
-      await tester.pumpWidget(_harness(app));
-      await tester.pump(const Duration(milliseconds: 300));
+      await _pumpLock(tester, app);
 
       await _tapDigits(tester, '482');
       await tester.pump(const Duration(milliseconds: 80));
@@ -239,8 +246,7 @@ void main() {
     testWidgets('الترتيب من اليسار: ١ أقصى اليسار و٣ على يمينه', (WidgetTester tester) async {
       final AppState app = await _lockedApp();
 
-      await tester.pumpWidget(_harness(app));
-      await tester.pump(const Duration(milliseconds: 300));
+      await _pumpLock(tester, app);
 
       final double one = tester.getCenter(find.byKey(const ValueKey<String>('pin_key_1'))).dx;
       final double three = tester.getCenter(find.byKey(const ValueKey<String>('pin_key_3'))).dx;
@@ -253,9 +259,9 @@ void main() {
     testWidgets('زر كيبورد الجهاز متاح ويكتب الرمز ويفتح', (WidgetTester tester) async {
       final AppState app = await _lockedApp();
 
-      await tester.pumpWidget(_harness(app));
-      await tester.pump(const Duration(milliseconds: 300));
+      await _pumpLock(tester, app);
 
+      await tester.ensureVisible(find.text('كيبورد الجهاز'));
       await tester.tap(find.text('كيبورد الجهاز'));
       await tester.pump(const Duration(milliseconds: 300));
 
@@ -275,8 +281,7 @@ void main() {
     testWidgets('لا يُذكر «بصمة كلمة السر» تحت الشاشة', (WidgetTester tester) async {
       final AppState app = await _lockedApp();
 
-      await tester.pumpWidget(_harness(app));
-      await tester.pump(const Duration(milliseconds: 300));
+      await _pumpLock(tester, app);
 
       expect(find.textContaining('بصمة'), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
@@ -289,8 +294,7 @@ void main() {
       final String pin64 = List<String>.generate(64, (int i) => '${i % 10}').join();
       final AppState app = await _lockedApp(pin: pin64, length: 64);
 
-      await tester.pumpWidget(_harness(app));
-      await tester.pump(const Duration(milliseconds: 300));
+      await _pumpLock(tester, app);
 
       // ٦٤ نقطة موزّعة على صفوف (١٦ في الصف).
       expect(PinDots.perRowFor(64), 16);
