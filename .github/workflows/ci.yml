@@ -40,7 +40,17 @@ jobs:
         if: ${{ always() && (github.event_name != 'workflow_dispatch' || inputs.run_tests) }}
         run: |
           set -o pipefail
-          flutter test --reporter expanded --timeout 90s 2>&1 | tee "$RUNNER_TEMP/test.txt"
+          # مهلة خارجية على كل خطوة: أي تعليق ينتهي ويفشل بوضوح مع نشر آخر السطور.
+          {
+            echo "=== تشخيص: تشغيل كل ملف اختبار على حدة (يكشف أي ملف يتعلّق) ==="
+            for f in test/*_test.dart; do
+              echo "--- الملف: $f"
+              timeout 150 flutter test "$f" --reporter compact --timeout 45s 2>&1 | tail -2 \
+                || echo ">>> تعلّق أو فشل: $f"
+            done
+            echo "=== تشغيل كل الاختبارات ==="
+            timeout 600 flutter test --reporter expanded --timeout 60s
+          } 2>&1 | tee "$RUNNER_TEMP/test.txt"
       # ينشر ملخّص التحليل/الاختبارات كتعليق على الـ commit لأن سجلات Actions غير قابلة للقراءة من بيئة التطوير.
       - name: نشر تقرير الفشل
         if: always()

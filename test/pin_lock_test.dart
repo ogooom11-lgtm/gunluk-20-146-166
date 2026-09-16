@@ -13,6 +13,9 @@ AppState _state() {
 }
 
 /// يجهّز شاشة القفل داخل نطاق التطبيق.
+///
+/// TickerMode مغلق: يوقف كل حركات الواجهة (نبض الشعار مثلًا) فلا تبقى إطارات
+/// مجدولة تُبقي الاختبار معلّقًا — منطق الإدخال نفسه لا يعتمد على الحركة.
 Widget _harness(AppState app) => AppScope(
       state: app,
       child: ListenableBuilder(
@@ -20,7 +23,7 @@ Widget _harness(AppState app) => AppScope(
         builder: (BuildContext context, Widget? _) => MaterialApp(
           theme: AppTheme.light(app.settings),
           locale: const Locale('ar'),
-          home: const LockScreen(),
+          home: const TickerMode(enabled: false, child: LockScreen()),
         ),
       ),
     );
