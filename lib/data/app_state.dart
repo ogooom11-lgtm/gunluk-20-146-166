@@ -1289,14 +1289,25 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// يتحقق من كلمة السر ويفتح التطبيق.
+  /// يتحقق من الرمز ويعيد النتيجة (بدون تغيير حالة القفل).
+  /// يعمل في عزلة منفصلة حتى لا تتجمّد الواجهة أثناء PBKDF2.
+  Future<bool> verifyLockPin(String pin) async {
+    if (!lockEnabled) return true;
+    final Map<String, dynamic> result = await _runTask(
+      verifyPinTask,
+      <String, dynamic>{'password': pin, 'hash': settings.lockHash},
+    );
+    return result['ok'] == true;
+  }
+
+  /// يتحقق من الرمز ويفتح التطبيق عند صحّته.
   Future<bool> unlock(String password) async {
     if (!lockEnabled) {
       locked = false;
       notifyListeners();
       return true;
     }
-    final bool ok = SecureData.verifyPassword(password, settings.lockHash);
+    final bool ok = await verifyLockPin(password);
     if (ok) {
       locked = false;
       notifyListeners();
@@ -1304,17 +1315,34 @@ class AppState extends ChangeNotifier {
     return ok;
   }
 
-  /// تفعيل القفل بكلمة سر جديدة.
-  Future<void> setLockPassword(String password) async {
-    final String hash = SecureData.hashPassword(password);
-    await updateSettings(settings.copyWith(lockEnabled: true, lockHash: hash));
+  /// تفعيل القفل برمز أرقام جديد (يُحفظ عدد أرقامه لعرض النقاط).
+  Future<void> setLockPassword(String password, {int? pinLength}) async {
+    final Map<String, dynamic> result = await _runTask(
+      hashPinTask,
+      <String, dynamic>{'password': password},
+    );
+    final String hash = (result['data'] ?? '').toString();
+    if (hash.isEmpty) return;
+    await updateSettings(settings.copyWith(
+      lockEnabled: true,
+      lockHash: hash,
+      lockPinLength: pinLength ?? (password.length >= 4 ? password.length : 4),
+    ));
     locked = false;
     notifyListeners();
   }
 
-  /// إلغاء القفل نهائيًا (بعد التحقق من كلمة السر الحالية في الواجهة).
+  /// تعديل خيارات القفل (فتح تلقائي / عدد الأرقام).
+  Future<void> updateLockOptions({bool? autoUnlock, int? pinLength}) async {
+    await updateSettings(settings.copyWith(
+      lockAutoUnlock: autoUnlock,
+      lockPinLength: pinLength,
+    ));
+  }
+
+  /// إلغاء القفل نهائيًا (بعد التحقق من الرمز الحالي في الواجهة).
   Future<void> removeLock() async {
-    await updateSettings(settings.copyWith(lockEnabled: false, lockHash: ''));
+    await updateSettings(settings.copyWith(lockEnabled: false, lockHash: '', lockPinLength: 0));
     locked = false;
     notifyListeners();
   }

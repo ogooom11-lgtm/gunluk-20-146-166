@@ -44,6 +44,8 @@ class AppSettings {
     this.lockHash = '',
     this.lockWhenBackground = true,
     this.lockGraceSeconds = 30,
+    this.lockPinLength = 4,
+    this.lockAutoUnlock = true,
     this.secureScreen = false,
     this.encryptBackupsByDefault = true,
     this.lastExport,
@@ -100,6 +102,8 @@ class AppSettings {
       lockHash: (json['lh'] ?? '').toString(),
       lockWhenBackground: json['lb'] != false,
       lockGraceSeconds: (json['lg2'] as num?)?.toInt() ?? 30,
+      lockPinLength: (json['ll'] as num?)?.toInt() ?? 0,
+      lockAutoUnlock: json['lu'] != false,
       secureScreen: json['ss'] == true,
       encryptBackupsByDefault: json['eb'] != false,
       lastExport: json['lx'] != null ? DateTime.tryParse(json['lx'].toString()) : null,
@@ -170,6 +174,12 @@ class AppSettings {
   /// مهلة السماح قبل القفل بعد العودة للتطبيق (ثوانٍ).
   int lockGraceSeconds;
 
+  /// عدد أرقام رمز الدخول (0 = رمز قديم بنصوص — يُدخل نصيًا).
+  int lockPinLength;
+
+  /// فتح التطبيق تلقائيًا بمجرد اكتمال الرمز الصحيح.
+  bool lockAutoUnlock;
+
   /// منع التقاط الشاشة وإظهار المحتوى في مبدّل التطبيقات.
   bool secureScreen;
 
@@ -230,6 +240,8 @@ class AppSettings {
     String? lockHash,
     bool? lockWhenBackground,
     int? lockGraceSeconds,
+    int? lockPinLength,
+    bool? lockAutoUnlock,
     bool? secureScreen,
     bool? encryptBackupsByDefault,
     DateTime? lastExport,
@@ -277,6 +289,8 @@ class AppSettings {
         lockHash: lockHash ?? this.lockHash,
         lockWhenBackground: lockWhenBackground ?? this.lockWhenBackground,
         lockGraceSeconds: lockGraceSeconds ?? this.lockGraceSeconds,
+        lockPinLength: lockPinLength ?? this.lockPinLength,
+        lockAutoUnlock: lockAutoUnlock ?? this.lockAutoUnlock,
         secureScreen: secureScreen ?? this.secureScreen,
         encryptBackupsByDefault: encryptBackupsByDefault ?? this.encryptBackupsByDefault,
         lastExport: lastExport ?? this.lastExport,
@@ -325,6 +339,8 @@ class AppSettings {
         'lh': lockHash,
         'lb': lockWhenBackground,
         'lg2': lockGraceSeconds,
+        'll': lockPinLength,
+        'lu': lockAutoUnlock,
         'ss': secureScreen,
         'eb': encryptBackupsByDefault,
         'lx': lastExport?.toIso8601String(),

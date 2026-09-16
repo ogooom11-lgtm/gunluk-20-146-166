@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/l10n/app_strings.dart';
-import '../../core/utils/secure_data.dart';
 import '../app_scope.dart';
 import '../widgets/common.dart';
 import '../widgets/pickers.dart';
+import '../widgets/pin_sheet.dart';
 import '../widgets/settings_tiles.dart';
 
 /// شاشة الأمان: قفل التطبيق بكلمة سر، الحماية، وتشفير النسخ الاحتياطية.
@@ -111,6 +111,26 @@ class SecurityScreen extends StatelessWidget {
                   settings.copyWith(lockWhenBackground: v),
                 ),
               ),
+              SettingsSwitchTile(
+                title: context.tr('security.pinAutoUnlock'),
+                subtitle: context.tr('security.pinAutoUnlockDesc'),
+                icon: Icons.bolt_rounded,
+                value: settings.lockAutoUnlock,
+                enabled: settings.lockEnabled,
+                onChanged: (bool v) => context.appRead.updateLockOptions(autoUnlock: v),
+              ),
+              SettingsValueTile(
+                title: context.tr('security.pinLength'),
+                subtitle: context.tr('security.pinLengthDesc'),
+                icon: Icons.pin_rounded,
+                value: settings.lockPinLength >= 4
+                    ? context.tr('security.pinLengthValue', <String, String>{
+                        'n': context.numStr(settings.lockPinLength),
+                      })
+                    : context.tr('security.legacyPin'),
+                enabled: settings.lockEnabled,
+                onTap: () => _editPinLength(context),
+              ),
               SettingsValueTile(
                 title: context.tr('security.grace'),
                 subtitle: context.tr('security.graceDesc'),
@@ -162,60 +182,95 @@ class SecurityScreen extends StatelessWidget {
     );
   }
 
+  /// عدد الأرقام المختار حاليًا (٤ إن لم يُحدَّد بعد).
+  int _pinLengthOf(BuildContext context) {
+    final int stored = context.appRead.settings.lockPinLength;
+    return stored >= 4 ? stored : 4;
+  }
+
+  /// تفعيل القفل: يُدخل رمز أرقام جديد ثم يؤكّده على لوحة الأرقام.
   Future<void> _setPassword(BuildContext context) async {
-    final String? password = await showPasswordDialog(
-      context,
-      title: context.tr('security.enable'),
-      confirm: true,
-      submitLabel: context.tr('security.enable'),
-    );
-    if (password == null || !context.mounted) return;
-    await context.appRead.setLockPassword(password);
-    if (!context.mounted) return;
+    final bool ok = await _setNewPin(context);
+    if (!context.mounted || !ok) return;
     _toast(context, context.tr('security.passwordSet'));
   }
 
+  /// تغيير الرمز: أولًا التحقق من الرمز الحالي (إن كان رمزًا رقميًا)،
+  /// ثم تعيين رمز جديد.
   Future<void> _changePassword(BuildContext context) async {
+    if (!await _verifyCurrent(context)) return;
+    if (!context.mounted) return;
+    final bool ok = await _setNewPin(context);
+    if (!context.mounted || !ok) return;
+    _toast(context, context.tr('security.passwordChanged'));
+  }
+
+  /// إلغاء القفل بعد التحقق من الرمز الحالي.
+  Future<void> _disableLock(BuildContext context) async {
+    if (!await _verifyCurrent(context)) return;
+    if (!context.mounted) return;
+    await context.appRead.removeLock();
+    if (!context.mounted) return;
+    _toast(context, context.tr('security.lockRemoved'));
+  }
+
+  /// تعديل عدد أرقام الرمز (يعمل مع الرمز الحالي مباشرة).
+  Future<void> _editPinLength(BuildContext context) async {
+    final app = context.appRead;
+    final int? picked = await showChoiceSheet<int>(
+      context,
+      title: context.tr('security.pinLength'),
+      subtitle: context.tr('security.pinLengthDesc'),
+      value: _pinLengthOf(context),
+      options: <ChoiceItem<int>>[
+        for (final int n in <int>[4, 5, 6, 7, 8])
+          ChoiceItem<int>(
+            value: n,
+            label: context.tr('security.pinLengthValue', <String, String>{'n': context.numStr(n)}),
+            icon: Icons.pin_rounded,
+          ),
+      ],
+    );
+    if (picked == null) return;
+    await app.updateLockOptions(pinLength: picked);
+  }
+
+  /// إدخال رمز جديد مرّتين على لوحة الأرقام. يعيد true عند الحفظ.
+  Future<bool> _setNewPin(BuildContext context) async {
+    final int length = _pinLengthOf(context);
+    final String? pin = await showPinSetupSheet(
+      context,
+      title: context.tr('security.enable'),
+      subtitle: context.tr('security.pinNumbersOnly'),
+      length: length,
+    );
+    if (pin == null || !context.mounted) return false;
+    await context.appRead.setLockPassword(pin, pinLength: length);
+    return true;
+  }
+
+  /// التحقق من الرمز الحالي إن كان رمزيًا؛ وإن كان قديمًا (نصّي) نستخدم النص.
+  Future<bool> _verifyCurrent(BuildContext context) async {
+    final app = context.appRead;
+    if (app.settings.lockPinLength >= 4) {
+      final bool ok = await showPinVerifySheet(
+        context,
+        title: context.tr('security.currentPassword'),
+        length: app.settings.lockPinLength,
+      );
+      if (!ok && context.mounted) _toast(context, context.tr('security.wrongPassword'), error: true);
+      return ok;
+    }
     final String? current = await showPasswordDialog(
       context,
       title: context.tr('security.change'),
       fieldLabel: context.tr('security.currentPassword'),
       submitLabel: context.tr('common.next'),
     );
-    if (current == null || !context.mounted) return;
-    if (!SecureData.verifyPassword(current, context.appRead.settings.lockHash)) {
-      _toast(context, context.tr('security.wrongPassword'), error: true);
-      return;
-    }
-    if (!context.mounted) return;
-    final String? next = await showPasswordDialog(
-      context,
-      title: context.tr('security.change'),
-      fieldLabel: context.tr('security.newPassword'),
-      confirm: true,
-      submitLabel: context.tr('common.save'),
-    );
-    if (next == null || !context.mounted) return;
-    await context.appRead.setLockPassword(next);
-    if (!context.mounted) return;
-    _toast(context, context.tr('security.passwordChanged'));
-  }
-
-  Future<void> _disableLock(BuildContext context) async {
-    final String? current = await showPasswordDialog(
-      context,
-      title: context.tr('security.disable'),
-      fieldLabel: context.tr('security.currentPassword'),
-      submitLabel: context.tr('security.disable'),
-    );
-    if (current == null || !context.mounted) return;
-    if (!SecureData.verifyPassword(current, context.appRead.settings.lockHash)) {
-      _toast(context, context.tr('security.wrongPassword'), error: true);
-      return;
-    }
-    await context.appRead.removeLock();
-    if (!context.mounted) return;
-    _toast(context, context.tr('security.lockRemoved'));
+    if (current == null || !context.mounted) return false;
+    final bool ok = await app.verifyLockPin(current);
+    if (!ok && context.mounted) _toast(context, context.tr('security.wrongPassword'), error: true);
+    return ok;
   }
 
   Future<void> _editGrace(BuildContext context) async {

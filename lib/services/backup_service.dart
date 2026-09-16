@@ -15,6 +15,31 @@ enum ImportStatus {
   notBackup,
 }
 
+/// مهمة إنشاء بصمة الرمز — تُنفَّذ في عزلة منفصلة (PBKDF2 ثقيل نسبيًا).
+Map<String, dynamic> hashPinTask(Map<String, dynamic> args) {
+  try {
+    return <String, dynamic>{
+      'ok': true,
+      'data': SecureData.hashPassword((args['password'] ?? '').toString()),
+    };
+  } catch (_) {
+    return <String, dynamic>{'ok': false, 'key': 'secure.hashFailed'};
+  }
+}
+
+/// مهمة التحقق من الرمز — في عزلة منفصلة حتى تبقى الواجهة سلسة.
+Map<String, dynamic> verifyPinTask(Map<String, dynamic> args) {
+  try {
+    final bool ok = SecureData.verifyPassword(
+      (args['password'] ?? '').toString(),
+      (args['hash'] ?? '').toString(),
+    );
+    return <String, dynamic>{'ok': ok};
+  } catch (_) {
+    return <String, dynamic>{'ok': false};
+  }
+}
+
 /// مهام التشفير الثقيلة — تُنفَّذ في عزلة منفصلة عبر `compute` حتى لا تتجمّد الواجهة.
 ///
 /// تُعيد قواميس بسيطة (نصوص فقط) لتكون آمنة تمامًا عند نقلها بين العُزَل:
