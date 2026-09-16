@@ -30,11 +30,29 @@ android {
         resourceConfigurations += listOf("ar", "en")
     }
 
+    signingConfigs {
+        // مفتاح توقيع تجريبي ثابت مرفوع مع المستودع، والغرض منه أن تكون كل
+        // نسخ CI موقّعة بنفس المفتاح فتُثبَّت النسخة الجديدة فوق القديمة مباشرة.
+        // (مفتاح التصحيح التلقائي كان يُعاد توليده في كل تشغيل، فيرفض النظام
+        // التحديث برسالة «التطبيق غير مثبَّت»).
+        // للنشر على المتجر: استبدله بمفتاحك الخاص ولا ترفعه للمستودع أبدًا.
+        create("injazi") {
+            storeFile = file("injazi-test-signing.p12")
+            storeType = "PKCS12"
+            storePassword = "injazi2026"
+            keyAlias = "injazi"
+            keyPassword = "injazi2026"
+        }
+    }
+
     buildTypes {
         release {
-            // توقيع بمفتاح التصحيح حتى تبني نسخة release للتجربة محليًا.
-            // للنشر على المتجر: أنشئ keystore خاصًا بك وضع إعداداته هنا.
-            signingConfig = signingConfigs.getByName("debug")
+            // نستخدم المفتاح الثابت إن وُجد، وإلا نعود لمفتاح التصحيح.
+            signingConfig = if (file("injazi-test-signing.p12").exists()) {
+                signingConfigs.getByName("injazi")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             isMinifyEnabled = false
             isShrinkResources = false
         }
