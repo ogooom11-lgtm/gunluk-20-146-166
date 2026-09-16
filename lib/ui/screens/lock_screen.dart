@@ -523,10 +523,6 @@ class _LockScreenState extends State<LockScreen> with SingleTickerProviderStateM
                 ),
               ),
             ),
-            TextButton(
-              onPressed: _forgot,
-              child: Text(context.tr('security.pinForgot')),
-            ),
             Expanded(
               child: Align(
                 alignment: AlignmentDirectional.centerEnd,
@@ -540,6 +536,14 @@ class _LockScreenState extends State<LockScreen> with SingleTickerProviderStateM
               ),
             ),
           ],
+        ),
+        // زر واضح لنسيان كلمة المرور في سطر مستقل (يعمل في وضعي اللوحة والكيبورد).
+        const SizedBox(height: 6),
+        OutlinedButton.icon(
+          key: const ValueKey<String>('pin_forgot'),
+          onPressed: _busy ? null : _forgot,
+          icon: const Icon(Icons.help_outline_rounded, size: 18),
+          label: Text(context.tr('security.pinForgot')),
         ),
         if (!_autoUnlock && !_kbMode)
           Padding(

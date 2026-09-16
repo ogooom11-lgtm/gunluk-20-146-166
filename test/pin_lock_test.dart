@@ -278,6 +278,25 @@ void main() {
       app.dispose();
     });
 
+    testWidgets('زر «نسيت كلمة المرور؟» ظاهر تحت اللوحة', (WidgetTester tester) async {
+      final AppState app = await _lockedApp();
+
+      await _pumpLock(tester, app);
+
+      expect(find.byKey(const ValueKey<String>('pin_forgot')), findsOneWidget);
+      expect(find.text('نسيت كلمة المرور؟'), findsOneWidget);
+
+      // يفتح حوار النسخة الاحتياطية أولًا (لا حذف مباشر).
+      await tester.ensureVisible(find.byKey(const ValueKey<String>('pin_forgot')));
+      await tester.tap(find.byKey(const ValueKey<String>('pin_forgot')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.textContaining('لا تُحذف بياناتك'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      app.dispose();
+    });
+
     testWidgets('لا يُذكر «بصمة كلمة السر» تحت الشاشة', (WidgetTester tester) async {
       final AppState app = await _lockedApp();
 
