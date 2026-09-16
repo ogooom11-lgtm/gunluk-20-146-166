@@ -55,7 +55,7 @@ class DashboardScreen extends StatelessWidget {
             _progressCard(context, done: done, total: active.length, remainingMinutes: remainingMinutes),
             if (app.focusRunning) ...<Widget>[
               const SizedBox(height: 12),
-              _focusCard(context),
+              _focusSessionCard(context),
             ],
             const SizedBox(height: 12),
             _statsRow(context, week),
@@ -198,7 +198,7 @@ class DashboardScreen extends StatelessWidget {
   }
 
   /// بطاقة جلسة التركيز الجارية — تظهر في الرئيسية وتفتح المؤقّت.
-  Widget _focusCard(BuildContext context) {
+  Widget _focusSessionCard(BuildContext context) {
     final app = context.app;
     final bool paused = app.focusPaused;
     final int remaining = app.focusRemainingSeconds;

@@ -77,7 +77,6 @@ class _FocusScreenState extends State<FocusScreen> {
     final app = context.appRead;
     if (app.focusCompletedCount == _seenCompleted) return;
     _seenCompleted = app.focusCompletedCount;
-    final int breakMinutes = context.st.breakMinutes;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
