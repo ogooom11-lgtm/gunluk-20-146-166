@@ -92,6 +92,10 @@ class AppState extends ChangeNotifier {
     await repo.reload();
     await applyPendingOps(silent: true);
     _prune();
+    // التأكد من وجود نسخ الخطط القادمة (والنسخة الحالية) — بدونها لا تظهر
+    // مهام الخطط في التقويم ولا تُجدول تذكيراتها بعد إعادة التشغيل.
+    final int healed = ensureOccurrences(pastDays: 0);
+    if (healed > 0) _dirty = true;
     // قفل التطبيق عند الإقلاع إن كان مفعّلًا.
     locked = settings.lockEnabled && settings.lockHash.isNotEmpty;
     ready = true;
@@ -167,6 +171,8 @@ class AppState extends ChangeNotifier {
       await repo.write(data);
       _load();
       _prune();
+      // نسخة مستعادة قد لا تحتوي نسخ الخطط القادمة — نولّدها فورًا.
+      if (ensureOccurrences(pastDays: 0) > 0) _dirty = true;
       notifyListeners();
       await rebuildReminders(immediate: true);
       return true;
@@ -175,11 +181,15 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// تنظيف البيانات القديمة فقط: لا يُحذف أي شيء حديث أو قادم.
+  ///
+  /// تنبيه: diffDays(a, b) = b - a، لذا الشرط الصحيح لحذف «الأقدم من الحد»
+  /// هو أن يكون تاريخ العنصر أصغر من cutoff: diffDays(cutoff, date) < 0.
   void _prune() {
     final DateTime cutoff = Dates.addDays(DateTime.now(), -400);
     tasks.removeWhere((Task t) =>
-        t.planId != null && !t.done && Dates.diffDays(t.date, cutoff) < 0);
-    sessions.removeWhere((FocusSession s) => Dates.diffDays(s.start, cutoff) < 0);
+        t.planId != null && !t.done && Dates.diffDays(cutoff, t.date) < 0);
+    sessions.removeWhere((FocusSession s) => Dates.diffDays(cutoff, s.start) < 0);
   }
 
   void _save() {
@@ -307,10 +317,24 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> deleteTask(String id) async {
+    final Task? task = taskById(id);
+    if (task != null && task.planId != null) {
+      // حذف نسخة خطة يُعتبر «تخطّي ذلك اليوم»، وإلا عادت عند إعادة توليد النسخ.
+      planById(task.planId!)?.skippedDates.add(Dates.key(task.date));
+    }
     tasks.removeWhere((Task t) => t.id == id);
     await notifications.cancelTaskReminders(id);
     markDirty();
     _scheduleReminderRebuild();
+  }
+
+  /// تأجيل نسخة خطة إلى يوم آخر: نُسجّل اليوم الأصلي كمتخطّى حتى لا يُعاد
+  /// توليده، ونفصل المهمة عن الخطة حتى لا تتكرر في يومها الجديد.
+  void _detachFromPlan(Task task) {
+    final String? planId = task.planId;
+    if (planId == null) return;
+    planById(planId)?.skippedDates.add(Dates.key(task.date));
+    task.planId = null;
   }
 
   Future<void> setTaskDone(String id, bool done) async {
@@ -375,6 +399,7 @@ class AppState extends ChangeNotifier {
   Future<void> moveTaskToTomorrow(String id) async {
     final Task? task = taskById(id);
     if (task == null) return;
+    _detachFromPlan(task);
     task.date = Dates.addDays(Dates.today(), 1);
     task.updatedAt = DateTime.now();
     markDirty();
@@ -385,6 +410,7 @@ class AppState extends ChangeNotifier {
     final DateTime today = Dates.today();
     for (final Task t in tasks) {
       if (Dates.sameDay(t.date, today) && !t.done && !t.skipped) {
+        _detachFromPlan(t);
         t.date = Dates.addDays(today, 1);
         t.updatedAt = DateTime.now();
       }
@@ -465,10 +491,12 @@ class AppState extends ChangeNotifier {
   }
 
   /// توليد نسخ الخطط كي تظهر في التقويم والإشعارات.
-  void ensureOccurrences({Plan? onlyPlan, int pastDays = 400, int futureDays = 150}) {
+  /// يعيد عدد المهام التي أُضيفت.
+  int ensureOccurrences({Plan? onlyPlan, int pastDays = 400, int futureDays = 150}) {
     final DateTime today = Dates.today();
     final DateTime from = Dates.addDays(today, -pastDays);
     final DateTime to = Dates.addDays(today, futureDays);
+    int added = 0;
     for (final Plan plan in (onlyPlan != null ? <Plan>[onlyPlan] : plans)) {
       if (plan.paused) continue;
       final DateTime start = Dates.diffDays(from, plan.startDate) > 0 ? from : plan.startDate;
@@ -480,9 +508,11 @@ class AppState extends ChangeNotifier {
         final bool exists = tasks.any((Task t) => t.id == id);
         if (!exists) {
           tasks.add(plan.occurrenceTask(day));
+          added++;
         }
       }
     }
+    return added;
   }
 
   // ===== ملاحظات وجلسات =====
@@ -720,10 +750,11 @@ class AppState extends ChangeNotifier {
     markDirty(notify: false);
   }
 
-  Future<void> sendPreviewNotification() async {
+  /// إشعار تجريبي فوري — يعيد false إذا رفض النظام عرض الإشعار.
+  Future<bool> sendPreviewNotification() async {
     final AppLocalizations l10n = AppLocalizations.ofLocale(Locale(settings.language));
     await notifications.init(onTap: _handleNotificationTap);
-    await notifications.showInstant(
+    return notifications.showInstant(
       id: notifId('preview') + 1,
       title: l10n.t('notif.summaryTitle'),
       body: l10n.t('notif.summaryBody', <String, String>{'done': '3', 'total': '7', 'left': '4'}),
@@ -733,6 +764,9 @@ class AppState extends ChangeNotifier {
       accent: AppTheme.palette(settings).accent,
     );
   }
+
+  /// عدد التذكيرات المجدولة فعليًا في نظام الإشعارات.
+  Future<int> pendingReminderCount() => notifications.pendingCount();
 
   void _handleNotificationTap(NotifPayload payload) {
     // تفتح الواجهة التفاصيل بناءً على المحتوى — يُستهلك في RootShell

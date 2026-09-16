@@ -18,6 +18,30 @@ class NotificationSettingsScreen extends StatefulWidget {
 class _NotificationSettingsScreenState extends State<NotificationSettingsScreen> {
   bool _busy = false;
 
+  /// عدد التذكيرات المجدولة فعليًا في النظام (null = لم يُقرأ بعد).
+  int? _pending;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshScheduled());
+  }
+
+  /// يعيد جدولة التذكيرات ثم يقرأ عددها من نظام الإشعارات — يفيد في التأكد
+  /// أن الإشعارات مجدولة فعلًا على الجهاز.
+  Future<void> _refreshScheduled() async {
+    final app = context.appRead;
+    await app.rebuildReminders(immediate: true);
+    final int count = await app.pendingReminderCount();
+    if (!mounted) return;
+    setState(() => _pending = count);
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(context.tr('notif.refreshed', <String, String>{'n': context.numStr(count)}))),
+      );
+  }
+
   @override
   Widget build(BuildContext context) {
     final app = context.app;
@@ -329,6 +353,24 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                 },
               ),
               SettingsTile(
+                title: context.tr('notif.scheduled'),
+                subtitle: app.nextReminderAt == null
+                    ? context.tr('notif.noneScheduled')
+                    : context.tr('notif.nextAt', <String, String>{
+                        'when': '${context.relativeDay(app.nextReminderAt!)} — '
+                            '${context.timeStr(app.nextReminderAt!.hour * 60 + app.nextReminderAt!.minute)}',
+                      }),
+                icon: Icons.update_rounded,
+                onTap: _refreshScheduled,
+                trailing: _pending == null
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    : Pill(
+                        label: context.numStr(_pending!),
+                        color: _pending! > 0 ? const Color(0xFF43A047) : const Color(0xFFE0A02E),
+                        dense: true,
+                      ),
+              ),
+              SettingsTile(
                 title: context.tr('notif.preview'),
                 // نفس القيم التجريبية التي يرسلها الإشعار التجريبي
                 subtitle: context.tr('notif.summaryBody', <String, String>{
@@ -339,12 +381,14 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                 icon: Icons.send_rounded,
                 onTap: () async {
                   setState(() => _busy = true);
-                  await app.sendPreviewNotification();
+                  final bool sent = await app.sendPreviewNotification();
                   if (!mounted) return;
                   setState(() => _busy = false);
                   ScaffoldMessenger.of(context)
                     ..hideCurrentSnackBar()
-                    ..showSnackBar(SnackBar(content: Text(context.tr('notif.previewSent'))));
+                    ..showSnackBar(SnackBar(
+                      content: Text(context.tr(sent ? 'notif.previewSent' : 'notif.previewFailed')),
+                    ));
                 },
                 trailing: _busy
                     ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
@@ -420,10 +464,12 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
         ..showSnackBar(SnackBar(content: Text(context.tr('sound.silent'))));
       return;
     }
-    await app.sendPreviewNotification();
+    final bool sent = await app.sendPreviewNotification();
     if (!mounted) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(context.tr('notif.previewSent'))));
+      ..showSnackBar(SnackBar(
+        content: Text(context.tr(sent ? 'notif.previewSent' : 'notif.previewFailed')),
+      ));
   }
 }

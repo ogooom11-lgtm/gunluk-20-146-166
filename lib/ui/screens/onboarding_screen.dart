@@ -141,7 +141,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       ),
       rescheduleNotifications: true,
     );
-    await app.notifications.init(onTap: (payload) {});
+    // بلا معالج فارغ: حتى لا يُلغى معالج فتح المهمة عند الضغط على الإشعار.
+    await app.notifications.init();
     await app.notifications.requestNotificationPermission();
     await app.notifications.requestExactAlarmPermission();
     await app.rebuildReminders(immediate: true);

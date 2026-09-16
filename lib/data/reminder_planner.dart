@@ -138,13 +138,15 @@ class ReminderPlanner {
           final List<Task> dayTasks = tasks.where((Task t) => Dates.sameDay(t.date, day)).toList();
           final List<Task> pending = dayTasks.where((Task t) => !t.done && !t.skipped).toList()
             ..sort(_byTime);
-          final List<Task> overdue = tasks
-              .where((Task t) =>
-                  Dates.diffDays(t.date, day) < 0 &&
-                  Dates.diffDays(t.date, n) >= 0 &&
-                  !t.done &&
-                  !t.skipped)
-              .toList()
+          // المتأخّرة: مهام أيام سابقة لم تُنجز ولم تُتخطَّ (خلال آخر ٦٠ يومًا
+          // حتى لا تتراكم المهام القديمة في نص الإشعار).
+          // diffDays(a, b) = b - a ⇒ «t.date قبل day» تعني diffDays(day, t.date) < 0.
+          final List<Task> overdue = tasks.where((Task t) {
+            if (t.done || t.skipped) return false;
+            if (Dates.diffDays(t.date, n) < 0) return false; // موعدها في المستقبل
+            final int age = Dates.diffDays(day, t.date);
+            return age < 0 && age >= -60;
+          }).toList()
             ..sort((Task a, Task b) => a.date.compareTo(b.date));
 
           final String title = l10n.t('notif.summaryTitle');

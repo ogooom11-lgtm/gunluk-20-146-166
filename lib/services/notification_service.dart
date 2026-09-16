@@ -104,11 +104,19 @@ class NotificationService {
   AndroidFlutterLocalNotificationsPlugin? get _android =>
       _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
 
-  /// أيقونة الحالة (أحادية اللون).
+  /// أيقونة الحالة (أحادية اللون) — موجودة في res/drawable.
   static const String statusIcon = 'ic_stat_injaz';
 
+  /// الأيقونة الكبيرة الملوّنة (شعار التطبيق) — موجودة في res/drawable.
+  ///
+  /// مهم: يجب أن تكون من نوع drawable؛ تمرير اسم من mipmap (مثل ic_launcher)
+  /// يجعل إضافة الإشعارات ترفض الإشعار بالكامل برسالة invalid_large_icon.
+  static const String largeIcon = 'ic_notif_large';
+
   Future<void> init({NotifTapHandler? onTap}) async {
-    if (onTap != null) this.onTap = onTap;
+    // يُحدَّث المعالج دائمًا (حتى لو كانت الخدمة مهيّأة سابقًا) لأن تمرير
+    // معالج فارغ كان يمحو معالج فتح المهمة من الإشعار.
+    if (onTap != null && onTap != this.onTap) this.onTap = onTap;
     if (_initialized) return;
     TzService.ensure();
     const AndroidInitializationSettings android = AndroidInitializationSettings(statusIcon);
@@ -268,51 +276,47 @@ class NotificationService {
     }
   }
 
-  Future<void> schedule(
-    PlannedReminder reminder,
+  /// تفاصيل الإشعار المشتركة بين الجدولة والعرض الفوري.
+  AndroidNotificationDetails _details(
     AppSettings settings,
     AppLocalizations l10n, {
+    required ReminderKind kind,
+    required String title,
+    required String body,
+    List<String> lines = const <String>[],
     Color? accent,
-  }) async {
-    final String channelId = reminder.kind.channelId(settings.channelVersion);
+    bool withActions = false,
+    bool withLargeIcon = true,
+    bool onlyAlertOnce = false,
+  }) {
     final AndroidNotificationSound? sound = settings.sound.resource == null
         ? null
         : RawResourceAndroidNotificationSound(settings.sound.resource!);
     final List<String> actions = <String>[];
-    if (settings.actionButtons) {
+    if (withActions && settings.actionButtons) {
       actions.add(NotifAction.done);
       actions.add(NotifAction.snooze);
     }
-    final String payload = NotifPayload(
-      op: _opFor(reminder.kind),
-      kind: reminder.kind.name,
-      taskId: reminder.taskId,
-      day: reminder.when.toIso8601String().substring(0, 10),
-      title: reminder.title,
-      body: reminder.body,
-      lines: reminder.lines,
-    ).encode();
-
-    final AndroidNotificationDetails android = AndroidNotificationDetails(
-      channelId,
-      l10n.t(reminder.kind.nameKey),
-      channelDescription: l10n.t(reminder.kind.descKey),
+    return AndroidNotificationDetails(
+      kind.channelId(settings.channelVersion),
+      l10n.t(kind.nameKey),
+      channelDescription: l10n.t(kind.descKey),
       icon: statusIcon,
-      importance: _importanceFor(reminder.kind),
-      priority: _priorityFor(reminder.kind),
+      importance: _importanceFor(kind),
+      priority: _priorityFor(kind),
       color: accent,
-      colorized: accent != null && reminder.kind == ReminderKind.review,
+      colorized: accent != null && kind == ReminderKind.review,
       playSound: settings.sound.resource != null,
       sound: sound,
       enableVibration: settings.vibration != AppVibration.off,
       vibrationPattern: settings.vibration.pattern,
       category: AndroidNotificationCategory.reminder,
-      styleInformation: reminder.lines.isEmpty
-          ? BigTextStyleInformation(reminder.body, contentTitle: reminder.title, summaryText: l10n.t('app.name'))
-          : InboxStyleInformation(reminder.lines,
-              contentTitle: reminder.title, summaryText: reminder.body),
+      styleInformation: lines.isEmpty
+          ? BigTextStyleInformation(body, contentTitle: title, summaryText: l10n.t('app.name'))
+          : InboxStyleInformation(lines, contentTitle: title, summaryText: body),
       groupKey: settings.groupNotifications ? 'injaz_group' : null,
-      largeIcon: const DrawableResourceAndroidBitmap('ic_launcher'),
+      // أيقونة كبيرة من نوع drawable — لو كان المورد مفقودًا نتجاهله بدل رفض الإشعار.
+      largeIcon: withLargeIcon ? const DrawableResourceAndroidBitmap(largeIcon) : null,
       actions: <AndroidNotificationAction>[
         for (final String action in actions)
           AndroidNotificationAction(
@@ -324,39 +328,68 @@ class NotificationService {
             showsUserInterface: false,
           ),
       ],
-      ticker: reminder.title,
+      ticker: title,
       subText: l10n.t('app.name'),
-      onlyAlertOnce: reminder.kind == ReminderKind.nudge,
+      onlyAlertOnce: onlyAlertOnce,
       autoCancel: true,
     );
+  }
 
-    try {
-      await _plugin.zonedSchedule(
-        reminder.id,
-        reminder.title,
-        reminder.body,
-        TzService.from(reminder.when),
-        NotificationDetails(android: android),
-        androidScheduleMode: _exactAllowed
-            ? AndroidScheduleMode.exactAllowWhileIdle
-            : AndroidScheduleMode.inexactAllowWhileIdle,
-        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-        payload: payload,
-      );
-    } catch (_) {
-      // قد يفشل الجدول الدقيق بدون الإذن — نعيد المحاولة بشكل غير دقيق
-      try {
-        await _plugin.zonedSchedule(
-          reminder.id,
-          reminder.title,
-          reminder.body,
-          TzService.from(reminder.when),
-          NotificationDetails(android: android),
-          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-          uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-          payload: payload,
-        );
-      } catch (_) {}
+  Future<void> schedule(
+    PlannedReminder reminder,
+    AppSettings settings,
+    AppLocalizations l10n, {
+    Color? accent,
+  }) async {
+    final String payload = NotifPayload(
+      op: _opFor(reminder.kind),
+      kind: reminder.kind.name,
+      taskId: reminder.taskId,
+      day: reminder.when.toIso8601String().substring(0, 10),
+      title: reminder.title,
+      body: reminder.body,
+      lines: reminder.lines,
+    ).encode();
+
+    // نجرّب: دقيق → غير دقيق، ثم بدون الأيقونة الكبيرة إذا رفض النظام المورد.
+    final List<AndroidScheduleMode> modes = _exactAllowed
+        ? <AndroidScheduleMode>[
+            AndroidScheduleMode.exactAllowWhileIdle,
+            AndroidScheduleMode.inexactAllowWhileIdle,
+          ]
+        : <AndroidScheduleMode>[AndroidScheduleMode.inexactAllowWhileIdle];
+
+    for (final bool withLargeIcon in <bool>[true, false]) {
+      for (final AndroidScheduleMode mode in modes) {
+        try {
+          await _plugin.zonedSchedule(
+            reminder.id,
+            reminder.title,
+            reminder.body,
+            TzService.from(reminder.when),
+            NotificationDetails(
+              android: _details(
+                settings,
+                l10n,
+                kind: reminder.kind,
+                title: reminder.title,
+                body: reminder.body,
+                lines: reminder.lines,
+                accent: accent,
+                withActions: reminder.withActions,
+                withLargeIcon: withLargeIcon,
+                onlyAlertOnce: reminder.kind == ReminderKind.nudge,
+              ),
+            ),
+            androidScheduleMode: mode,
+            uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+            payload: payload,
+          );
+          return;
+        } catch (_) {
+          // نجرّب الاحتمال التالي
+        }
+      }
     }
   }
 
@@ -372,7 +405,8 @@ class NotificationService {
   }
 
   /// إشعار فوري (معاينة أو انتهاء مؤقّت التركيز).
-  Future<void> showInstant({
+  /// يعيد true إذا عُرض الإشعار فعلًا.
+  Future<bool> showInstant({
     required int id,
     required String title,
     required String body,
@@ -382,36 +416,35 @@ class NotificationService {
     Color? accent,
     String? payload,
   }) async {
-    if (!_initialized) await init();
-    await ensureChannels(settings, l10n);
-    final AndroidNotificationSound? sound = settings.sound.resource == null
-        ? null
-        : RawResourceAndroidNotificationSound(settings.sound.resource!);
-    await _plugin.show(
-      id,
-      title,
-      body,
-      NotificationDetails(
-        android: AndroidNotificationDetails(
-          kind.channelId(settings.channelVersion),
-          l10n.t(kind.nameKey),
-          channelDescription: l10n.t(kind.descKey),
-          icon: statusIcon,
-          importance: _importanceFor(kind),
-          priority: _priorityFor(kind),
-          color: accent,
-          playSound: settings.sound.resource != null,
-          sound: sound,
-          enableVibration: settings.vibration != AppVibration.off,
-          vibrationPattern: settings.vibration.pattern,
-          styleInformation: BigTextStyleInformation(body, contentTitle: title),
-          largeIcon: const DrawableResourceAndroidBitmap('ic_launcher'),
-          subText: l10n.t('app.name'),
-          autoCancel: true,
-        ),
-      ),
-      payload: payload,
-    );
+    try {
+      if (!_initialized) await init();
+      await ensureChannels(settings, l10n);
+    } catch (_) {}
+    for (final bool withLargeIcon in <bool>[true, false]) {
+      try {
+        await _plugin.show(
+          id,
+          title,
+          body,
+          NotificationDetails(
+            android: _details(
+              settings,
+              l10n,
+              kind: kind,
+              title: title,
+              body: body,
+              accent: accent,
+              withLargeIcon: withLargeIcon,
+            ),
+          ),
+          payload: payload,
+        );
+        return true;
+      } catch (_) {
+        // نجرّب بدون الأيقونة الكبيرة
+      }
+    }
+    return false;
   }
 
   Future<void> cancel(int id) async {
