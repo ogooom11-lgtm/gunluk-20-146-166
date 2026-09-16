@@ -113,7 +113,8 @@ class _QuickAddSheetState extends State<_QuickAddSheet> {
                     selected: !Dates.isToday(_day) && Dates.diffDays(Dates.today(), _day) != 1,
                     onTap: () async {
                       final DateTime? picked = await showDayPickerSheet(context, initial: _day);
-                      if (picked != null) setState(() => _day = picked);
+                      if (!mounted || picked == null) return;
+                      setState(() => _day = picked);
                     },
                   ),
                 ],
@@ -141,7 +142,8 @@ class _QuickAddSheetState extends State<_QuickAddSheet> {
                     selected: _minutes != null && !_quickTimes.contains(_minutes),
                     onTap: () async {
                       final int? picked = await showTimeWheelSheet(context, initialMinutes: _minutes ?? 9 * 60);
-                      if (picked != null && picked >= 0) setState(() => _minutes = picked);
+                      if (!mounted || picked == null || picked < 0) return;
+                      setState(() => _minutes = picked);
                     },
                   ),
                 ],

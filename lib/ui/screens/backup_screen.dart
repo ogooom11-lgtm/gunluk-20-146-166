@@ -147,9 +147,8 @@ class _BackupScreenState extends State<BackupScreen> {
                             onPressed: () async {
                               final ClipboardData? clip =
                                   await Clipboard.getData(Clipboard.kTextPlain);
-                              if (clip?.text != null) {
-                                setState(() => _import.text = clip!.text!);
-                              }
+                              if (!mounted || clip?.text == null) return;
+                              setState(() => _import.text = clip!.text!);
                             },
                             icon: const Icon(Icons.content_paste_rounded, size: 18),
                             label: Text(context.tr('common.copy')),

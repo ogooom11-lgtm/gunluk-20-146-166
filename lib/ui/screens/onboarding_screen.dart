@@ -261,7 +261,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 initialMinutes: _eveningMinutes,
                 title: context.tr('notif.eveningTime'),
               );
-              if (picked != null && picked >= 0) setState(() => _eveningMinutes = picked);
+              if (!mounted || picked == null || picked < 0) return;
+              setState(() => _eveningMinutes = picked);
             },
             padding: const EdgeInsets.symmetric(vertical: 26),
             child: Column(
