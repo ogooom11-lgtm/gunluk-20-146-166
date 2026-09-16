@@ -20,7 +20,10 @@ Map<String, dynamic> hashPinTask(Map<String, dynamic> args) {
   try {
     return <String, dynamic>{
       'ok': true,
-      'data': SecureData.hashPassword((args['password'] ?? '').toString()),
+      'data': SecureData.hashPassword(
+        (args['password'] ?? '').toString(),
+        iterations: (args['iterations'] as int?) ?? SecureData.passwordIterations,
+      ),
     };
   } catch (_) {
     return <String, dynamic>{'ok': false, 'key': 'secure.hashFailed'};

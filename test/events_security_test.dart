@@ -11,7 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// حالة تطبيق نظيفة تمامًا (بلا ملفات محفوظة) للاختبارات.
 AppState _freshState() {
   SharedPreferences.setMockInitialValues(<String, Object>{});
-  return AppState(useIsolates: false);
+  return AppState(useIsolates: false, pinIterations: 500);
 }
 
 void main() {
@@ -80,7 +80,7 @@ void main() {
 
     test('الأحداث تُحفظ في التخزين وتعود بعد إعادة التشغيل', () async {
       SharedPreferences.setMockInitialValues(<String, Object>{});
-      final AppState first = AppState(useIsolates: false);
+      final AppState first = AppState(useIsolates: false, pinIterations: 500);
       await first.init();
       await first.upsertEvent(DayEvent(
         id: '',
@@ -94,7 +94,7 @@ void main() {
       await first.flush();
 
       // حالة جديدة تقرأ نفس التخزين.
-      final AppState second = AppState(useIsolates: false);
+      final AppState second = AppState(useIsolates: false, pinIterations: 500);
       await second.init();
       expect(second.events.length, 1);
       final DayEvent loaded = second.events.first;
@@ -116,7 +116,7 @@ void main() {
       expect((data['events'] as List<dynamic>).length, 1);
 
       SharedPreferences.setMockInitialValues(<String, Object>{});
-      final AppState restored = AppState(useIsolates: false);
+      final AppState restored = AppState(useIsolates: false, pinIterations: 500);
       await restored.init();
       expect(restored.events.isEmpty, isTrue);
       final bool ok = await restored.importJson(app.exportJson());
@@ -153,12 +153,12 @@ void main() {
 
     test('القفل يُستعاد عند بدء التطبيق', () async {
       SharedPreferences.setMockInitialValues(<String, Object>{});
-      final AppState app = AppState(useIsolates: false);
+      final AppState app = AppState(useIsolates: false, pinIterations: 500);
       await app.init();
       await app.setLockPassword('123456');
       await app.flush();
 
-      final AppState restarted = AppState(useIsolates: false);
+      final AppState restarted = AppState(useIsolates: false, pinIterations: 500);
       await restarted.init();
       expect(restarted.lockEnabled, isTrue);
       expect(restarted.locked, isTrue, reason: 'يبدأ مقفلًا بعد إعادة التشغيل');
@@ -208,7 +208,7 @@ void main() {
 
       // حالة جديدة (فارغة) تستورد الملف.
       SharedPreferences.setMockInitialValues(<String, Object>{});
-      final AppState fresh = AppState(useIsolates: false);
+      final AppState fresh = AppState(useIsolates: false, pinIterations: 500);
       await fresh.init();
       expect(fresh.events.isEmpty, isTrue);
 

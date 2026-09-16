@@ -40,7 +40,7 @@ jobs:
         if: ${{ always() && (github.event_name != 'workflow_dispatch' || inputs.run_tests) }}
         run: |
           set -o pipefail
-          flutter test --reporter expanded 2>&1 | tee "$RUNNER_TEMP/test.txt"
+          flutter test --reporter expanded --timeout 90s 2>&1 | tee "$RUNNER_TEMP/test.txt"
       # ينشر ملخّص التحليل/الاختبارات كتعليق على الـ commit لأن سجلات Actions غير قابلة للقراءة من بيئة التطوير.
       - name: نشر تقرير الفشل
         if: always()

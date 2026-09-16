@@ -9,7 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 AppState _state() {
   SharedPreferences.setMockInitialValues(<String, Object>{});
-  return AppState(useIsolates: false);
+  return AppState(useIsolates: false, pinIterations: 500);
 }
 
 /// يجهّز شاشة القفل داخل نطاق التطبيق.
@@ -64,7 +64,7 @@ void main() {
       await app.setLockPassword('135790', pinLength: 6);
       await app.flush();
 
-      final AppState again = AppState(useIsolates: false);
+      final AppState again = AppState(useIsolates: false, pinIterations: 500);
       await again.init();
       expect(again.settings.lockPinLength, 6);
       expect(again.settings.lockAutoUnlock, isTrue, reason: 'الافتراضي: فتح تلقائي');
@@ -81,7 +81,7 @@ void main() {
       expect(app.settings.lockAutoUnlock, isFalse);
 
       await app.flush();
-      final AppState again = AppState(useIsolates: false);
+      final AppState again = AppState(useIsolates: false, pinIterations: 500);
       await again.init();
       expect(again.settings.lockAutoUnlock, isFalse);
     });

@@ -32,6 +32,7 @@ class AppState extends ChangeNotifier {
     AppRepository? repository,
     NotificationService? notifications,
     this.useIsolates = true,
+    this.pinIterations = SecureData.passwordIterations,
     DateTime Function()? clock,
   })  : repo = repository ?? AppRepository(),
         notifications = notifications ?? NotificationService.instance,
@@ -42,6 +43,9 @@ class AppState extends ChangeNotifier {
 
   /// مصدر الوقت الحالي (قابل للحقن في الاختبارات).
   final DateTime Function() clock;
+
+  /// عدد تكرارات PBKDF2 لبصمة رمز الدخول (يُخفَّض في الاختبارات فقط).
+  final int pinIterations;
 
   final AppRepository repo;
   final NotificationService notifications;
@@ -1319,7 +1323,7 @@ class AppState extends ChangeNotifier {
   Future<void> setLockPassword(String password, {int? pinLength}) async {
     final Map<String, dynamic> result = await _runTask(
       hashPinTask,
-      <String, dynamic>{'password': password},
+      <String, dynamic>{'password': password, 'iterations': pinIterations},
     );
     final String hash = (result['data'] ?? '').toString();
     if (hash.isEmpty) return;
