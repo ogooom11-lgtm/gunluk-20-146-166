@@ -99,10 +99,22 @@ class NotificationService {
   /// (كما في الاختبارات) نُكمل عملنا ولا نُجمّد واجهة التطبيق أو شاشة البداية.
   static const Duration platformTimeout = Duration(seconds: 3);
 
-  Future<T?> _guard<T>(Future<T>? future, {Duration? timeout}) async {
-    if (future == null) return null;
+  /// يستدعي دالة نظام لا تُعيد قيمة؛ false عند التعليق أو الفشل.
+  Future<bool> _guardCall(Future<void>? call, {Duration? timeout}) async {
+    if (call == null) return false;
     try {
-      return await future.timeout(timeout ?? platformTimeout);
+      await call.timeout(timeout ?? platformTimeout);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// يستدعي دالة نظام تُعيد قيمة؛ null عند التعليق أو الفشل.
+  Future<T?> _guardValue<T>(Future<T>? call, {Duration? timeout}) async {
+    if (call == null) return null;
+    try {
+      return await call.timeout(timeout ?? platformTimeout);
     } catch (_) {
       return null;
     }
@@ -135,7 +147,7 @@ class NotificationService {
     const AndroidInitializationSettings android = AndroidInitializationSettings(statusIcon);
     const InitializationSettings settings = InitializationSettings(android: android);
     try {
-      final bool? ok = await _guard(_plugin.initialize(
+      final ok = await _guardValue(_plugin.initialize(
         settings,
         onDidReceiveNotificationResponse: _handleResponse,
         onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
@@ -150,7 +162,7 @@ class NotificationService {
 
   Future<void> refreshExactStatus() async {
     try {
-      _exactAllowed = await _guard(_android?.canScheduleExactNotifications()) ?? false;
+      _exactAllowed = await _guardValue(_android?.canScheduleExactNotifications()) ?? false;
     } catch (_) {
       _exactAllowed = false;
     }
@@ -166,7 +178,7 @@ class NotificationService {
 
   Future<bool> requestNotificationPermission() async {
     try {
-      final bool? granted = await _guard(_android?.requestNotificationsPermission());
+      final granted = await _guardValue(_android?.requestNotificationsPermission());
       return granted ?? true;
     } catch (_) {
       return false;
@@ -175,7 +187,7 @@ class NotificationService {
 
   Future<bool> requestExactAlarmPermission() async {
     try {
-      final bool? granted = await _guard(_android?.requestExactAlarmsPermission());
+      final granted = await _guardValue(_android?.requestExactAlarmsPermission());
       await refreshExactStatus();
       return granted ?? false;
     } catch (_) {
@@ -185,7 +197,7 @@ class NotificationService {
 
   Future<bool> areNotificationsEnabled() async {
     try {
-      return await _guard(_android?.areNotificationsEnabled()) ?? true;
+      return await _guardValue(_android?.areNotificationsEnabled()) ?? true;
     } catch (_) {
       return true;
     }
@@ -375,7 +387,7 @@ class NotificationService {
     for (final bool withLargeIcon in <bool>[true, false]) {
       for (final AndroidScheduleMode mode in modes) {
         try {
-          final bool? ok = await _guard(_plugin.zonedSchedule(
+          final bool ok = await _guardCall(_plugin.zonedSchedule(
             reminder.id,
             reminder.title,
             reminder.body,
@@ -398,7 +410,7 @@ class NotificationService {
             uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
             payload: payload,
           ));
-          if (ok != null) return;
+          if (ok) return;
         } catch (_) {
           // نجرّب الاحتمال التالي
         }
@@ -435,7 +447,7 @@ class NotificationService {
     } catch (_) {}
     for (final bool withLargeIcon in <bool>[true, false]) {
       try {
-        final bool? ok = await _guard(_plugin.show(
+        final ok = await _guardValue(_plugin.show(
           id,
           title,
           body,
@@ -462,7 +474,7 @@ class NotificationService {
 
   Future<void> cancel(int id) async {
     try {
-      await _guard(_plugin.cancel(id));
+      await _guardCall(_plugin.cancel(id));
     } catch (_) {}
   }
 
@@ -514,7 +526,7 @@ class NotificationService {
     final int max = totalSeconds < 1 ? 1 : totalSeconds;
     final int value = elapsedSeconds.clamp(0, max);
     try {
-      final bool? ok = await _guard(_plugin.show(
+      final bool ok = await _guardCall(_plugin.show(
         id,
         title,
         body,
@@ -549,7 +561,7 @@ class NotificationService {
         ),
         payload: payload,
       ));
-      return ok != null;
+      return ok;
     } catch (_) {
       return false;
     }
@@ -558,20 +570,20 @@ class NotificationService {
   /// يُخفي إشعار مؤقّت التركيز.
   Future<void> cancelFocusProgress(int id) async {
     try {
-      await _guard(_plugin.cancel(id));
+      await _guardCall(_plugin.cancel(id));
     } catch (_) {}
   }
 
   Future<void> cancelAll() async {
     try {
-      await _guard(_plugin.cancelAll());
+      await _guardCall(_plugin.cancelAll());
     } catch (_) {}
   }
 
   Future<int> pendingCount() async {
     try {
       final List<PendingNotificationRequest>? list =
-          await _guard(_plugin.pendingNotificationRequests());
+          await _guardValue(_plugin.pendingNotificationRequests());
       return list?.length ?? 0;
     } catch (_) {
       return 0;
@@ -582,11 +594,11 @@ class NotificationService {
     if (taskId == null) return;
     try {
       final List<PendingNotificationRequest>? list =
-          await _guard(_plugin.pendingNotificationRequests());
+          await _guardValue(_plugin.pendingNotificationRequests());
       for (final PendingNotificationRequest item in list ?? <PendingNotificationRequest>[]) {
         final NotifPayload? payload = NotifPayload.decode(item.payload);
         if (payload?.taskId == taskId) {
-          await _guard(_plugin.cancel(item.id));
+          await _guardCall(_plugin.cancel(item.id));
         }
       }
     } catch (_) {}
