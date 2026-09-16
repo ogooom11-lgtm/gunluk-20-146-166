@@ -12,6 +12,25 @@ AppState _state() {
   return AppState(useIsolates: false, pinIterations: 500);
 }
 
+/// حالة مقفلة جاهزة للاختبارات الرسومية.
+///
+/// لا نستدعي `init()` هنا: داخل `testWidgets` لا تُجيب قنوات النظام (بلا محرّك)
+/// فينتظر `init` إلى الأبد — بينما منطق القفل نفسه لا يحتاج التخزين أو الإشعارات.
+Future<AppState> _lockedApp({
+  String pin = '1234',
+  int length = 4,
+  bool autoUnlock = true,
+}) async {
+  final AppState app = _state();
+  await app.repo.ensure();
+  await app.setLockPassword(pin, pinLength: length);
+  await app.updateLockOptions(autoUnlock: autoUnlock);
+  // سقف زمني: لو تعلّقت أي قناة نظام لا يتعلّق الاختبار معها.
+  await app.flush().timeout(const Duration(seconds: 10));
+  app.lockNow();
+  return app;
+}
+
 /// يجهّز شاشة القفل داخل نطاق التطبيق.
 ///
 /// TickerMode مغلق: يوقف كل حركات الواجهة (نبض الشعار مثلًا) فلا تبقى إطارات
@@ -124,10 +143,7 @@ void main() {
 
   group('شاشة القفل التفاعلية', () {
     testWidgets('نقاط بعدد أرقام الرمز ولوحة أرقام كاملة', (WidgetTester tester) async {
-      final AppState app = _state();
-      await app.init();
-      await app.setLockPassword('1234', pinLength: 4);
-      app.lockNow();
+      final AppState app = await _lockedApp();
 
       await tester.pumpWidget(_harness(app));
       await tester.pump(const Duration(milliseconds: 300));
@@ -144,10 +160,7 @@ void main() {
     });
 
     testWidgets('الرمز الصحيح يفتح التطبيق تلقائيًا', (WidgetTester tester) async {
-      final AppState app = _state();
-      await app.init();
-      await app.setLockPassword('1234', pinLength: 4);
-      app.lockNow();
+      final AppState app = await _lockedApp();
 
       await tester.pumpWidget(_harness(app));
       await tester.pump(const Duration(milliseconds: 300));
@@ -163,10 +176,7 @@ void main() {
     });
 
     testWidgets('الرمز الخاطئ يُظهر رسالة خطأ ولا يفتح', (WidgetTester tester) async {
-      final AppState app = _state();
-      await app.init();
-      await app.setLockPassword('1234', pinLength: 4);
-      app.lockNow();
+      final AppState app = await _lockedApp();
 
       await tester.pumpWidget(_harness(app));
       await tester.pump(const Duration(milliseconds: 300));
@@ -183,11 +193,7 @@ void main() {
     });
 
     testWidgets('عند إيقاف الفتح التلقائي يظهر زر التأكيد ✓', (WidgetTester tester) async {
-      final AppState app = _state();
-      await app.init();
-      await app.setLockPassword('1234', pinLength: 4);
-      await app.updateLockOptions(autoUnlock: false);
-      app.lockNow();
+      final AppState app = await _lockedApp(autoUnlock: false);
 
       await tester.pumpWidget(_harness(app));
       await tester.pump(const Duration(milliseconds: 300));
@@ -209,10 +215,7 @@ void main() {
     });
 
     testWidgets('الحذف يتراجع رقمًا واحدًا', (WidgetTester tester) async {
-      final AppState app = _state();
-      await app.init();
-      await app.setLockPassword('4821', pinLength: 4);
-      app.lockNow();
+      final AppState app = await _lockedApp(pin: '4821');
 
       await tester.pumpWidget(_harness(app));
       await tester.pump(const Duration(milliseconds: 300));

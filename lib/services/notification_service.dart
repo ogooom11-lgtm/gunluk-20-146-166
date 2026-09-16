@@ -95,6 +95,19 @@ class NotificationService {
 
   NotifTapHandler? onTap;
 
+  /// مهلة قصوى لاستدعاءات قنوات النظام: لو تعلّق النظام أو لم يوجد محرّك
+  /// (كما في الاختبارات) نُكمل عملنا ولا نُجمّد واجهة التطبيق أو شاشة البداية.
+  static const Duration platformTimeout = Duration(seconds: 3);
+
+  Future<T?> _guard<T>(Future<T>? future, {Duration? timeout}) async {
+    if (future == null) return null;
+    try {
+      return await future.timeout(timeout ?? platformTimeout);
+    } catch (_) {
+      return null;
+    }
+  }
+
   bool get exactAllowed => _exactAllowed;
 
   bool get isInitialized => _initialized;
@@ -122,12 +135,12 @@ class NotificationService {
     const AndroidInitializationSettings android = AndroidInitializationSettings(statusIcon);
     const InitializationSettings settings = InitializationSettings(android: android);
     try {
-      await _plugin.initialize(
+      final bool? ok = await _guard(_plugin.initialize(
         settings,
         onDidReceiveNotificationResponse: _handleResponse,
         onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
-      );
-      _initialized = true;
+      ));
+      _initialized = ok != null;
     } catch (_) {
       // الإشعارات غير متاحة في هذه البيئة (مثل الاختبارات) — التطبيق يكمل عمله.
       _initialized = false;
@@ -137,7 +150,7 @@ class NotificationService {
 
   Future<void> refreshExactStatus() async {
     try {
-      _exactAllowed = await _android?.canScheduleExactNotifications() ?? false;
+      _exactAllowed = await _guard(_android?.canScheduleExactNotifications()) ?? false;
     } catch (_) {
       _exactAllowed = false;
     }
@@ -153,7 +166,7 @@ class NotificationService {
 
   Future<bool> requestNotificationPermission() async {
     try {
-      final bool? granted = await _android?.requestNotificationsPermission();
+      final bool? granted = await _guard(_android?.requestNotificationsPermission());
       return granted ?? true;
     } catch (_) {
       return false;
@@ -162,7 +175,7 @@ class NotificationService {
 
   Future<bool> requestExactAlarmPermission() async {
     try {
-      final bool? granted = await _android?.requestExactAlarmsPermission();
+      final bool? granted = await _guard(_android?.requestExactAlarmsPermission());
       await refreshExactStatus();
       return granted ?? false;
     } catch (_) {
@@ -172,7 +185,7 @@ class NotificationService {
 
   Future<bool> areNotificationsEnabled() async {
     try {
-      return await _android?.areNotificationsEnabled() ?? true;
+      return await _guard(_android?.areNotificationsEnabled()) ?? true;
     } catch (_) {
       return true;
     }
@@ -362,7 +375,7 @@ class NotificationService {
     for (final bool withLargeIcon in <bool>[true, false]) {
       for (final AndroidScheduleMode mode in modes) {
         try {
-          await _plugin.zonedSchedule(
+          final bool? ok = await _guard(_plugin.zonedSchedule(
             reminder.id,
             reminder.title,
             reminder.body,
@@ -384,8 +397,8 @@ class NotificationService {
             androidScheduleMode: mode,
             uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
             payload: payload,
-          );
-          return;
+          ));
+          if (ok != null) return;
         } catch (_) {
           // نجرّب الاحتمال التالي
         }
@@ -422,7 +435,7 @@ class NotificationService {
     } catch (_) {}
     for (final bool withLargeIcon in <bool>[true, false]) {
       try {
-        await _plugin.show(
+        final bool? ok = await _guard(_plugin.show(
           id,
           title,
           body,
@@ -438,8 +451,8 @@ class NotificationService {
             ),
           ),
           payload: payload,
-        );
-        return true;
+        ));
+        if (ok != null) return true;
       } catch (_) {
         // نجرّب بدون الأيقونة الكبيرة
       }
@@ -449,7 +462,7 @@ class NotificationService {
 
   Future<void> cancel(int id) async {
     try {
-      await _plugin.cancel(id);
+      await _guard(_plugin.cancel(id));
     } catch (_) {}
   }
 
@@ -501,7 +514,7 @@ class NotificationService {
     final int max = totalSeconds < 1 ? 1 : totalSeconds;
     final int value = elapsedSeconds.clamp(0, max);
     try {
-      await _plugin.show(
+      final bool? ok = await _guard(_plugin.show(
         id,
         title,
         body,
@@ -535,8 +548,8 @@ class NotificationService {
           ),
         ),
         payload: payload,
-      );
-      return true;
+      ));
+      return ok != null;
     } catch (_) {
       return false;
     }
@@ -545,20 +558,21 @@ class NotificationService {
   /// يُخفي إشعار مؤقّت التركيز.
   Future<void> cancelFocusProgress(int id) async {
     try {
-      await _plugin.cancel(id);
+      await _guard(_plugin.cancel(id));
     } catch (_) {}
   }
 
   Future<void> cancelAll() async {
     try {
-      await _plugin.cancelAll();
+      await _guard(_plugin.cancelAll());
     } catch (_) {}
   }
 
   Future<int> pendingCount() async {
     try {
-      final List<PendingNotificationRequest> list = await _plugin.pendingNotificationRequests();
-      return list.length;
+      final List<PendingNotificationRequest>? list =
+          await _guard(_plugin.pendingNotificationRequests());
+      return list?.length ?? 0;
     } catch (_) {
       return 0;
     }
@@ -567,11 +581,12 @@ class NotificationService {
   Future<void> cancelTaskReminders(String? taskId) async {
     if (taskId == null) return;
     try {
-      final List<PendingNotificationRequest> list = await _plugin.pendingNotificationRequests();
-      for (final PendingNotificationRequest item in list) {
+      final List<PendingNotificationRequest>? list =
+          await _guard(_plugin.pendingNotificationRequests());
+      for (final PendingNotificationRequest item in list ?? <PendingNotificationRequest>[]) {
         final NotifPayload? payload = NotifPayload.decode(item.payload);
         if (payload?.taskId == taskId) {
-          await _plugin.cancel(item.id);
+          await _guard(_plugin.cancel(item.id));
         }
       }
     } catch (_) {}

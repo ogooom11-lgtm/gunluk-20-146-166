@@ -25,7 +25,7 @@ Future<void> main() async {
   final AppState state = AppState();
   runApp(InjaziApp(state: state));
   // التهيئة في الخلفية كي لا تتأخر الواجهة الأولى
-  await state.init();
+  await state.initOnce();
 }
 
 /// الواجهة الجذرية للتطبيق.

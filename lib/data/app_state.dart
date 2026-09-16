@@ -161,6 +161,15 @@ class AppState extends ChangeNotifier {
 
   // ===== تهيئة =====
 
+  bool _initOnceStarted = false;
+
+  /// تهيئة محميّة من التكرار (تُستدعى من main) ولا تعتمد على مهلة من الخارج.
+  Future<void> initOnce() async {
+    if (_initOnceStarted) return;
+    _initOnceStarted = true;
+    await init();
+  }
+
   Future<void> init() async {
     await repo.ensure();
     _load();
