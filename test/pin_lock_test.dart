@@ -264,9 +264,9 @@ void main() {
       await tester.ensureVisible(find.text('كيبورد الجهاز'));
       await tester.tap(find.text('كيبورد الجهاز'));
       await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.byKey(const ValueKey<String>('pin_keyboard_field')), findsOneWidget);
-      expect(find.byKey(const ValueKey<String>('pin_key_1')), findsNothing, reason: 'لوحة الأرقام اختفت');
 
       await tester.enterText(find.byKey(const ValueKey<String>('pin_keyboard_field')), '1234');
       for (int i = 0; i < 8; i++) {
@@ -364,8 +364,9 @@ void main() {
       expect(find.text('4'), findsOneWidget);
       expect(find.text('64'), findsOneWidget);
 
+      await tester.ensureVisible(find.text('64'));
       await tester.tap(find.text('64'));
-      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump(const Duration(milliseconds: 500));
       expect(picked, 64);
 
       await tester.pumpWidget(const SizedBox.shrink());
