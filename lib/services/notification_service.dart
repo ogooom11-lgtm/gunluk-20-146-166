@@ -147,7 +147,7 @@ class NotificationService {
     const AndroidInitializationSettings android = AndroidInitializationSettings(statusIcon);
     const InitializationSettings settings = InitializationSettings(android: android);
     try {
-      final ok = await _guardValue(_plugin.initialize(
+      final bool? ok = await _guardValue<bool?>(_plugin.initialize(
         settings,
         onDidReceiveNotificationResponse: _handleResponse,
         onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
@@ -162,7 +162,7 @@ class NotificationService {
 
   Future<void> refreshExactStatus() async {
     try {
-      _exactAllowed = await _guardValue(_android?.canScheduleExactNotifications()) ?? false;
+      _exactAllowed = await _guardValue<bool?>(_android?.canScheduleExactNotifications()) ?? false;
     } catch (_) {
       _exactAllowed = false;
     }
@@ -178,7 +178,7 @@ class NotificationService {
 
   Future<bool> requestNotificationPermission() async {
     try {
-      final granted = await _guardValue(_android?.requestNotificationsPermission());
+      final bool? granted = await _guardValue<bool?>(_android?.requestNotificationsPermission());
       return granted ?? true;
     } catch (_) {
       return false;
@@ -187,7 +187,7 @@ class NotificationService {
 
   Future<bool> requestExactAlarmPermission() async {
     try {
-      final granted = await _guardValue(_android?.requestExactAlarmsPermission());
+      final bool? granted = await _guardValue<bool?>(_android?.requestExactAlarmsPermission());
       await refreshExactStatus();
       return granted ?? false;
     } catch (_) {
@@ -197,7 +197,7 @@ class NotificationService {
 
   Future<bool> areNotificationsEnabled() async {
     try {
-      return await _guardValue(_android?.areNotificationsEnabled()) ?? true;
+      return await _guardValue<bool?>(_android?.areNotificationsEnabled()) ?? true;
     } catch (_) {
       return true;
     }
@@ -447,7 +447,7 @@ class NotificationService {
     } catch (_) {}
     for (final bool withLargeIcon in <bool>[true, false]) {
       try {
-        final ok = await _guardValue(_plugin.show(
+        final bool ok = await _guardCall(_plugin.show(
           id,
           title,
           body,
@@ -464,7 +464,7 @@ class NotificationService {
           ),
           payload: payload,
         ));
-        if (ok != null) return true;
+        if (ok) return true;
       } catch (_) {
         // نجرّب بدون الأيقونة الكبيرة
       }
