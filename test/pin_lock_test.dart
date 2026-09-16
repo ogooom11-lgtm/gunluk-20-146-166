@@ -366,7 +366,10 @@ void main() {
 
       await tester.ensureVisible(find.text('64'));
       await tester.tap(find.text('64'));
-      await tester.pump(const Duration(milliseconds: 500));
+      // ننتظر حركة إغلاق الورقة ثم إتمام المستقبل الذي يعيد القيمة.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump(const Duration(milliseconds: 400));
       expect(picked, 64);
 
       await tester.pumpWidget(const SizedBox.shrink());
