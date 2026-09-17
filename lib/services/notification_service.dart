@@ -113,10 +113,18 @@ class NotificationService {
     _platformFailures = 0;
   }
 
+  /// يستهلك نتيجة استدعاء لن ننتظرها، حتى لا يبقى خطأ غير معالَج.
+  static void _drain(Future<Object?>? call) {
+    call?.then<void>((Object? _) {}, onError: (Object _, StackTrace __) {});
+  }
+
   /// يستدعي دالة نظام لا تُعيد قيمة؛ false عند التعليق أو الفشل.
   Future<bool> _guardCall(Future<void>? call, {Duration? timeout}) async {
     if (call == null) return false;
-    if (_platformDown) return false;
+    if (_platformDown) {
+      _drain(call);
+      return false;
+    }
     try {
       await call.timeout(timeout ?? platformTimeout);
       _notePlatformSuccess();
@@ -130,7 +138,10 @@ class NotificationService {
   /// يستدعي دالة نظام تُعيد قيمة؛ null عند التعليق أو الفشل.
   Future<T?> _guardValue<T>(Future<T>? call, {Duration? timeout}) async {
     if (call == null) return null;
-    if (_platformDown) return null;
+    if (_platformDown) {
+      _drain(call);
+      return null;
+    }
     try {
       final T? value = await call.timeout(timeout ?? platformTimeout);
       _notePlatformSuccess();

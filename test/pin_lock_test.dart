@@ -5,7 +5,6 @@ import 'package:gunluk/data/app_state.dart';
 import 'package:gunluk/theme/app_theme.dart';
 import 'package:gunluk/ui/app_scope.dart';
 import 'package:gunluk/ui/screens/lock_screen.dart';
-import 'package:gunluk/ui/widgets/pin_pad.dart';
 import 'package:gunluk/ui/widgets/pin_sheet.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
