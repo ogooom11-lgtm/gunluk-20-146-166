@@ -61,6 +61,32 @@ flutter test
 flutter build apk --release      # ينتج build/app/outputs/flutter-apk/app-release.apk
 ```
 
+### أخطاء شائعة عند البناء محليًا
+
+1. **`error: unresolved reference 'biometric'`** داخل `MainActivity.kt`
+   (مع `import androidx.biometric...`): معناها أن ملف `android/app/build.gradle.kts`
+   عندك قديم ولا يعلن مكتبة نافذة التعرّف. أضِف داخل الكتلة الأخيرة في الملف:
+
+   ```kotlin
+   dependencies {
+       coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+       implementation("androidx.biometric:biometric:1.1.0")
+   }
+   ```
+
+   أو انسخ الملف كما هو من هذا الفرع (وتأكّد أن `MainActivity` يرث
+   `FlutterFragmentActivity`، فهذا شرط لنافذة التعرّف).
+2. **`Failed connecting to the Kotlin compile daemon`**: شائع على ويندوز
+   (مضاد فيروسات/جدار ناري يمنع مقبس العملية). أضِف في
+   `android/gradle.properties`:
+
+   ```properties
+   kotlin.compiler.execution.strategy=in-process
+   ```
+
+   فيُترجم Kotlin داخل عملية Gradle نفسها بلا ديمون منفصل.
+3. بعد أي تعديل على ملفات أندرويد: `flutter clean` ثم `flutter pub get` ثم أعد البناء.
+
 > نسخة الإصدار تُوقّع بمفتاح تجريبي ثابت مرفوع مع المشروع
 > (`android/app/injazi-test-signing.p12`) كي تُثبَّت النسخة الجديدة فوق القديمة
 > دون حذف التطبيق. **لا تستخدم هذا المفتاح للنشر على المتجر**؛ أنشئ keystore
