@@ -81,3 +81,28 @@ Future<bool> _askPasscode(BuildContext context, {required bool unavailable}) asy
   );
   return use ?? false;
 }
+
+/// هل يسمح النظام بالشاشة الكاملة للمنبّه؟ (أندرويد ١٤+ يحتاج موافقة المستخدم)
+Future<bool> alarmFullScreenAvailable() async {
+  try {
+    final bool? ok = await const MethodChannel('injaz/security')
+        .invokeMethod<bool>('canFullScreen');
+    return ok ?? true;
+  } on MissingPluginException {
+    return true;
+  } on PlatformException {
+    return true;
+  }
+}
+
+/// فتح صفحة النظام للسماح بشاشة المنبّه الكاملة.
+Future<void> openAlarmFullScreenSettings() async {
+  try {
+    await const MethodChannel('injaz/security')
+        .invokeMethod<void>('openFullScreenSettings');
+  } on MissingPluginException {
+    // لا شيء: القناة غير متاحة (اختبارات أو سطح مكتب).
+  } on PlatformException {
+    // تجاهل.
+  }
+}

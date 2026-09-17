@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../services/security_gate.dart';
+
 import '../../core/enums.dart';
 import '../../core/models/app_settings.dart';
 import '../../core/l10n/app_strings.dart';
@@ -295,6 +297,27 @@ class SettingsScreen extends StatelessWidget {
                 onChanged: (bool value) => app.updateSettings(
                   settings.copyWith(alarmRequireUnlock: value),
                 ),
+              ),
+              SettingsValueTile(
+                title: context.tr('alarm.fullScreen'),
+                subtitle: context.tr('alarm.fullScreenDesc'),
+                icon: Icons.open_in_full_rounded,
+                value: context.tr('alarm.fullScreenValue'),
+                onTap: settings.alarmEnabled
+                    ? () async {
+                        await openAlarmFullScreenSettings();
+                        if (!context.mounted) return;
+                        final bool ok = await alarmFullScreenAvailable();
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(context.tr(
+                              ok ? 'alarm.fullScreenAllowed' : 'alarm.fullScreenDenied',
+                            )),
+                          ),
+                        );
+                      }
+                    : null,
               ),
               SettingsValueTile(
                 title: context.tr('alarm.snoozeDefault'),

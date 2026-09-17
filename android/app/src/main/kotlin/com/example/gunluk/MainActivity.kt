@@ -1,8 +1,11 @@
 package com.example.gunluk
 
 import android.app.Activity
+import android.app.NotificationManager
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import android.view.WindowManager
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
@@ -58,6 +61,11 @@ class MainActivity : FlutterFragmentActivity() {
                 when (call.method) {
                     "available" -> result.success(canAuthenticate())
                     "authenticate" -> authenticate(result)
+                    "canFullScreen" -> result.success(canFullScreen())
+                    "openFullScreenSettings" -> {
+                        openFullScreenSettings()
+                        result.success(true)
+                    }
                     else -> result.notImplemented()
                 }
             }
@@ -67,6 +75,31 @@ class MainActivity : FlutterFragmentActivity() {
 
     private val securityChannel = "injaz/security"
     private var authResult: MethodChannel.Result? = null
+
+    /**
+     * هل يسمح النظام بفتح شاشة كاملة من إشعار (أندرويد ١٤+ يحتاج موافقة
+     * المستخدم من الإعدادات). على الإصدارات الأقدم مسموح دائمًا.
+     */
+    private fun canFullScreen(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return true
+        val manager = getSystemService(NotificationManager::class.java)
+        return manager?.canUseFullScreenIntent() ?: true
+    }
+
+    /** فتح صفحة النظام للسماح بشاشة المنبّه الكاملة. */
+    private fun openFullScreenSettings() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return
+        try {
+            startActivity(
+                Intent(
+                    Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
+                    Uri.parse("package:$packageName"),
+                ),
+            )
+        } catch (e: Exception) {
+            // بعض الأجهزة لا توفّر الصفحة — نكتفي بالإشعار العادي.
+        }
+    }
 
     /** هل يمكن للجهاز التحقّق (وجه/بصمة أو قفل شاشة)؟ */
     private fun canAuthenticate(): Boolean {
