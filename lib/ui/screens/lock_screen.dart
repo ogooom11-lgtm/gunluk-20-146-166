@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/l10n/app_strings.dart';
+import '../../core/models/app_settings.dart';
 import '../../theme/app_theme.dart';
 import '../app_scope.dart';
 import '../widgets/pin_pad.dart';
@@ -16,6 +17,7 @@ import '../widgets/progress_ring.dart';
 /// - عند تفعيل «الفتح التلقائي» يُفتح التطبيق بمجرد اكتمال الرمز الصحيح.
 /// - عند إيقافه يظهر زر ✓ للتأكيد.
 /// - بعد كل ٣ محاولات خاطئة يتوقف الإدخال ٣٠ ثانية مع عدّاد دائري.
+/// - لا تظهر أي خانات فارغة ولا عدد الأرقام: نقطة لكل رقم تكتبه فقط، في صف واحد.
 class LockScreen extends StatefulWidget {
   const LockScreen({super.key});
 
@@ -47,9 +49,17 @@ class _LockScreenState extends State<LockScreen> with SingleTickerProviderStateM
     duration: const Duration(milliseconds: 700),
   )..forward();
 
-  int get _pinLength {
-    final int stored = context.appRead.settings.lockPinLength;
-    return stored >= 4 ? stored : 4;
+  int get _pinLength => AppSettings.clampPinLength(context.appRead.settings.lockPinLength) == 0
+      ? AppSettings.minPinLength
+      : AppSettings.clampPinLength(context.appRead.settings.lockPinLength);
+
+  /// حجم زر اللوحة: أكبر حجم مريح للعين مع بقاء الشاشة كاملة بلا تمرير.
+  double _keySizeFor(BuildContext context) {
+    final Size size = MediaQuery.of(context).size;
+    final double byWidth = (size.width - 44) / 3;
+    final double byHeight = (size.height - 430) / 4;
+    final double best = byWidth < byHeight ? byWidth : byHeight;
+    return best.clamp(54.0, 92.0);
   }
 
   bool get _autoUnlock => context.appRead.settings.lockAutoUnlock;
@@ -129,7 +139,7 @@ class _LockScreenState extends State<LockScreen> with SingleTickerProviderStateM
   }
 
   void _push(String digit) {
-    if (_busy || _waitSeconds > 0 || _digits.length >= _pinLength) return;
+    if (_busy || _waitSeconds > 0 || _digits.length >= AppSettings.maxPinLength) return;
     if (_kbText.text.isNotEmpty) _kbText.clear();
     setState(() {
       _digits.add(digit);
@@ -177,8 +187,13 @@ class _LockScreenState extends State<LockScreen> with SingleTickerProviderStateM
     if (!mounted) return;
     setState(() => _busy = false);
     if (ok) {
+      _attempts = 0;
+      _timer?.cancel();
       HapticFeedback.mediumImpact();
-      setState(() => _state = PinState.success);
+      setState(() {
+        _waitSeconds = 0;
+        _state = PinState.success;
+      });
       return;
     }
     // خطأ: اهتزاز + وميض أحمر ثم تفريغ النقاط.
@@ -304,6 +319,8 @@ class _LockScreenState extends State<LockScreen> with SingleTickerProviderStateM
     final String name = app.settings.name.trim();
     final bool blocked = _waitSeconds > 0;
     final int remainingAttempts = 3 - (_attempts % 3);
+    // حجم الأزرار: أكبر ما يمكن مع بقاء كل شيء داخل الشاشة بلا تمرير.
+    final double keySize = _keySizeFor(context);
 
     // أثناء تجهيز النسخة الاحتياطية قبل البدء من جديد.
     if (_savingBackup) {
@@ -358,7 +375,7 @@ class _LockScreenState extends State<LockScreen> with SingleTickerProviderStateM
                       children: <Widget>[
                         _header(context, name),
                         _middle(context, blocked, remainingAttempts),
-                        _keypad(context, blocked),
+                        _keypad(context, blocked, keySize),
                       ],
                     ),
                   ),
@@ -410,11 +427,10 @@ class _LockScreenState extends State<LockScreen> with SingleTickerProviderStateM
         ShakeWidget(
           trigger: _shake,
           child: PinDots(
-            length: _pinLength,
             filled: _digits.length,
             state: _state,
-            dotSize: 18,
-            spacing: 20,
+            dotSize: 14,
+            spacing: 10,
           ),
         ),
         const SizedBox(height: 18),
@@ -484,7 +500,7 @@ class _LockScreenState extends State<LockScreen> with SingleTickerProviderStateM
   }
 
   /// لوحة الأرقام المخصّصة + زر الكيبورد + روابط المساعدة.
-  Widget _keypad(BuildContext context, bool blocked) {
+  Widget _keypad(BuildContext context, bool blocked, double keySize) {
     return Column(
       children: <Widget>[
         AnimatedSwitcher(
@@ -494,12 +510,12 @@ class _LockScreenState extends State<LockScreen> with SingleTickerProviderStateM
               : PinPad(
                   key: const ValueKey<String>('pin_pad'),
                   enabled: !blocked && !_busy,
-                  maxKeySize: _pinLength > 8 ? 56 : 74,
+                  maxKeySize: keySize,
                   onDigit: _push,
                   onBackspace: _pop,
                   onClearAll: _clearAll,
-                  // زر التأكيد يظهر فقط عندما يكون الفتح التلقائي معطّلًا.
-                  onConfirm: _autoUnlock ? null : _submit,
+                  // زر ✓ متاح دائمًا، والفتح التلقائي يعمل أيضًا عند اكتمال الطول.
+                  onConfirm: _submit,
                 ),
         ),
         const SizedBox(height: 2),
@@ -545,14 +561,6 @@ class _LockScreenState extends State<LockScreen> with SingleTickerProviderStateM
           icon: const Icon(Icons.help_outline_rounded, size: 18),
           label: Text(context.tr('security.pinForgot')),
         ),
-        if (!_autoUnlock && !_kbMode)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Text(
-              context.tr('security.confirmPin'),
-              style: Theme.of(context).textTheme.labelSmall,
-            ),
-          ),
         Text(
           context.tr('security.pinLockedTip'),
           style: Theme.of(context).textTheme.labelSmall,
@@ -575,9 +583,11 @@ class _LockScreenState extends State<LockScreen> with SingleTickerProviderStateM
         obscuringCharacter: '●',
         keyboardType: TextInputType.number,
         textInputAction: TextInputAction.done,
-        maxLength: _pinLength,
+        // بلا حدّ يظهر للمستخدم: الحد الأعلى فقط (٦٤) حتى لا يُعرف الطول.
+        maxLength: AppSettings.maxPinLength,
         textDirection: TextDirection.ltr,
         textAlign: TextAlign.center,
+        inputFormatters: <TextInputFormatter>[FilteringTextInputFormatter.digitsOnly],
         onChanged: _onKeyboardChanged,
         onSubmitted: (_) => _submit(),
         style: Theme.of(context).textTheme.headlineSmall?.copyWith(
@@ -586,15 +596,13 @@ class _LockScreenState extends State<LockScreen> with SingleTickerProviderStateM
             ),
         decoration: InputDecoration(
           counterText: '',
-          hintText: '•' * _pinLength,
+          hintText: context.tr('security.pinEnter'),
           prefixIcon: const Icon(Icons.keyboard_alt_outlined),
-          suffixIcon: _autoUnlock
-              ? null
-              : IconButton(
-                  icon: const Icon(Icons.check_rounded),
-                  tooltip: context.tr('security.confirmPin'),
-                  onPressed: _submit,
-                ),
+          suffixIcon: IconButton(
+            icon: const Icon(Icons.check_rounded),
+            tooltip: context.tr('security.confirmPin'),
+            onPressed: _submit,
+          ),
         ),
       ),
     );

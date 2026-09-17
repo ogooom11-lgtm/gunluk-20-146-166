@@ -10,21 +10,22 @@ import '../app_scope.dart';
 /// حالة إدخال الرمز — تُستخدم لتلوين النقاط وتحريكها.
 enum PinState { idle, verifying, error, success }
 
-/// صفّ نقاط الرمز: نقطة لكل رقم، تتعبّأ بحركة مرنة.
+/// صفّ نقاط الرمز: نقطة لكل رقم مكتوب **فقط** — بلا خانات فارغة.
 ///
-/// - الرموز الطويلة (حتى ٦٤ رقمًا) تُعرض بعدة صفوف مع تصغير النقاط.
-/// - الترتيب من اليسار لليمين ليطابق لوحة الأرقام.
+/// - لا يُعرف طول كلمة المرور من الشاشة: لا نعرض أي عدد، والنقاط تظهر واحدة
+///   تلو الأخرى مع الكتابة.
+/// - كل النقاط في **صف واحد** يتحرّك أفقيًا (الأحدث ظاهر دائمًا)، فيعمل مع
+///   ٤ خانات أو ٦٤ خانة بنفس الشكل.
 class PinDots extends StatelessWidget {
   const PinDots({
     super.key,
-    required this.length,
     required this.filled,
     this.state = PinState.idle,
-    this.dotSize = 16,
-    this.spacing = 16,
+    this.dotSize = 13,
+    this.spacing = 9,
   });
 
-  final int length;
+  /// كم رقمًا كُتب حتى الآن (النقاط الظاهرة).
   final int filled;
   final PinState state;
   final double dotSize;
@@ -43,61 +44,54 @@ class PinDots extends StatelessWidget {
     }
   }
 
-  /// كم نقطة في الصف الواحد حسب الطول.
-  static int perRowFor(int length) => length <= 8 ? length : (length <= 20 ? 10 : 16);
-
-  /// حجم النقطة المناسب للطول (تصغر كلما طال الرمز).
-  static double dotSizeFor(int length, double base) {
-    if (length <= 8) return base;
-    if (length <= 20) return base * 0.8;
-    return base * 0.6;
-  }
-
   @override
   Widget build(BuildContext context) {
     final Color color = _color(context);
     final bool dim = state == PinState.verifying;
-    final int perRow = perRowFor(length);
-    final double size = dotSizeFor(length, dotSize);
-    final List<Widget> dots = <Widget>[
-      for (int i = 0; i < length; i++)
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: spacing / 2, vertical: spacing / 4),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeOutBack,
-            width: size,
-            height: size,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: i < filled ? color.withAlpha(dim ? 130 : 255) : Colors.transparent,
-              border: Border.all(
-                color: i < filled ? color : color.withAlpha(90),
-                width: 2.1,
-              ),
-              boxShadow: i < filled
-                  ? <BoxShadow>[
-                      BoxShadow(color: color.withAlpha(70), blurRadius: 10, spreadRadius: 1),
-                    ]
-                  : null,
-            ),
+
+    if (filled == 0) {
+      // خط دلالة هادئ فقط — لا يكشف عدد الخانات.
+      return Center(
+        child: Container(
+          width: 74,
+          height: 3,
+          decoration: BoxDecoration(
+            color: color.withAlpha(70),
+            borderRadius: BorderRadius.circular(3),
           ),
         ),
-    ];
-    if (length <= perRow) {
-      return Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        textDirection: TextDirection.ltr,
-        children: dots,
       );
     }
-    // رمز طويل: نقاط بعدة صفوف داخل عرض محدود بدل صف واحد يفيض.
-    return ConstrainedBox(
-      constraints: BoxConstraints(maxWidth: perRow * (size + spacing)),
-      child: Wrap(
-        alignment: WrapAlignment.center,
-        textDirection: TextDirection.ltr,
-        children: dots,
+
+    return SizedBox(
+      height: dotSize + 12,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        reverse: true,
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Row(
+          textDirection: TextDirection.ltr,
+          children: <Widget>[
+            for (int i = 0; i < filled; i++)
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: spacing / 2),
+                child: AnimatedContainer(
+                  key: ValueKey<String>('pin_dot_$i'),
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOutBack,
+                  width: dotSize,
+                  height: dotSize,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: color.withAlpha(dim ? 130 : 255),
+                    boxShadow: <BoxShadow>[
+                      BoxShadow(color: color.withAlpha(60), blurRadius: 8, spreadRadius: 1),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -140,12 +134,12 @@ class _PinKeyState extends State<PinKey> {
         ? Colors.white
         : Theme.of(context).colorScheme.onSurface.withAlpha(_active ? 235 : 90);
     Widget content = widget.icon != null
-        ? Icon(widget.icon, size: 26, color: fg)
+        ? Icon(widget.icon, size: 30, color: fg)
         : Text(
             widget.label ?? '',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                   color: fg,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w600,
                   fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
                 ),
           );
@@ -218,8 +212,8 @@ class PinPad extends StatelessWidget {
     this.onConfirm,
     this.onClearAll,
     this.enabled = true,
-    this.maxKeySize = 74,
-    this.spacing = 10,
+    this.maxKeySize = 84,
+    this.spacing = 12,
   });
 
   final ValueChanged<String> onDigit;
@@ -232,9 +226,10 @@ class PinPad extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // أكبر حجم ممكن مع بقاء الأزرار داخل عرض الشاشة.
     final double keySize = math.min(
       maxKeySize,
-      (MediaQuery.of(context).size.width - 80) / 3,
+      (MediaQuery.of(context).size.width - 44) / 3,
     );
     return Column(
       mainAxisSize: MainAxisSize.min,

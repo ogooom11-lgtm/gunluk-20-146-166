@@ -164,8 +164,11 @@ void main() {
         expect(find.byKey(ValueKey<String>('pin_key_$digit')), findsOneWidget);
       }
       expect(find.byKey(const ValueKey<String>('pin_key_back')), findsOneWidget);
-      // الفتح التلقائي مفعّل ⇒ لا يظهر زر التأكيد.
-      expect(find.byKey(const ValueKey<String>('pin_key_confirm')), findsNothing);
+      // زر ✓ متاح دائمًا (والفتح التلقائي يعمل عند اكتمال الطول).
+      expect(find.byKey(const ValueKey<String>('pin_key_confirm')), findsOneWidget);
+
+      // لا تُعرض خانات فارغة: لا نقاط قبل الكتابة.
+      expect(find.byKey(const ValueKey<String>('pin_dot_0')), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       app.dispose();
@@ -297,6 +300,30 @@ void main() {
       app.dispose();
     });
 
+    testWidgets('النقاط تظهر مع الكتابة فقط وفي صف واحد', (WidgetTester tester) async {
+      final AppState app = await _lockedApp(pin: '1234567890123456789012', length: 22);
+
+      await _pumpLock(tester, app);
+
+      // لا شيء قبل الكتابة.
+      expect(find.byKey(const ValueKey<String>('pin_dot_0')), findsNothing);
+
+      await _tapDigits(tester, '12345');
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(find.byKey(const ValueKey<String>('pin_dot_0')), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('pin_dot_4')), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('pin_dot_5')), findsNothing,
+          reason: 'تظهر نقطة واحدة لكل رقم مكتوب');
+
+      // كل النقاط في صف واحد: نفس الإحداثي الرأسي.
+      final double y0 = tester.getCenter(find.byKey(const ValueKey<String>('pin_dot_0'))).dy;
+      final double y4 = tester.getCenter(find.byKey(const ValueKey<String>('pin_dot_4'))).dy;
+      expect(y4, y0, reason: 'النقاط في صف واحد بلا صفوف تحت بعضها');
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      app.dispose();
+    });
+
     testWidgets('لا يُذكر «بصمة كلمة السر» تحت الشاشة', (WidgetTester tester) async {
       final AppState app = await _lockedApp();
 
@@ -315,9 +342,8 @@ void main() {
 
       await _pumpLock(tester, app);
 
-      // ٦٤ نقطة موزّعة على صفوف (١٦ في الصف).
-      expect(PinDots.perRowFor(64), 16);
-      expect(PinDots.dotSizeFor(64, 18), lessThan(18));
+      // لا تُعرض أي خانة قبل الكتابة (الطول غير مكشوف).
+      expect(find.byKey(const ValueKey<String>('pin_dot_0')), findsNothing);
 
       final String prefix = pin64.substring(0, 60);
       await _tapDigits(tester, prefix);

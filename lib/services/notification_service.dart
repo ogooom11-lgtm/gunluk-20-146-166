@@ -99,13 +99,30 @@ class NotificationService {
   /// (كما في الاختبارات) نُكمل عملنا ولا نُجمّد واجهة التطبيق أو شاشة البداية.
   static const Duration platformTimeout = Duration(seconds: 3);
 
+  /// النظام لم يستجب (أو لا يوجد محرّك): نتوقف عن مناداته في هذه الجلسة
+  /// حتى لا يتكرّر الانتظار ويتجمّد التطبيق.
+  bool _platformDown = false;
+  int _platformFailures = 0;
+
+  void _notePlatformFailure() {
+    _platformFailures++;
+    if (_platformFailures >= 3) _platformDown = true;
+  }
+
+  void _notePlatformSuccess() {
+    _platformFailures = 0;
+  }
+
   /// يستدعي دالة نظام لا تُعيد قيمة؛ false عند التعليق أو الفشل.
   Future<bool> _guardCall(Future<void>? call, {Duration? timeout}) async {
     if (call == null) return false;
+    if (_platformDown) return false;
     try {
       await call.timeout(timeout ?? platformTimeout);
+      _notePlatformSuccess();
       return true;
     } catch (_) {
+      _notePlatformFailure();
       return false;
     }
   }
@@ -113,9 +130,13 @@ class NotificationService {
   /// يستدعي دالة نظام تُعيد قيمة؛ null عند التعليق أو الفشل.
   Future<T?> _guardValue<T>(Future<T>? call, {Duration? timeout}) async {
     if (call == null) return null;
+    if (_platformDown) return null;
     try {
-      return await call.timeout(timeout ?? platformTimeout);
+      final T? value = await call.timeout(timeout ?? platformTimeout);
+      _notePlatformSuccess();
+      return value;
     } catch (_) {
+      _notePlatformFailure();
       return null;
     }
   }
@@ -297,6 +318,7 @@ class NotificationService {
     await cancelAll();
     if (!settings.notificationsEnabled) return;
     for (final PlannedReminder reminder in reminders) {
+      if (_platformDown) return; // النظام متوقف: لا نكرّر الانتظار لكل تذكير.
       await schedule(reminder, settings, l10n, accent: accent);
     }
   }
@@ -386,6 +408,7 @@ class NotificationService {
 
     for (final bool withLargeIcon in <bool>[true, false]) {
       for (final AndroidScheduleMode mode in modes) {
+        if (_platformDown) return;
         try {
           final bool ok = await _guardCall(_plugin.zonedSchedule(
             reminder.id,

@@ -253,7 +253,6 @@ class _PinSheetState extends State<_PinSheet> {
               ShakeWidget(
                 trigger: _shake,
                 child: PinDots(
-                  length: _target,
                   filled: _digits.length,
                   state: _state,
                 ),
@@ -296,22 +295,25 @@ class _PinSheetState extends State<_PinSheet> {
                         obscuringCharacter: '●',
                         keyboardType: TextInputType.number,
                         textInputAction: TextInputAction.done,
-                        maxLength: _target,
+                        maxLength: AppSettings.maxPinLength,
                         textDirection: TextDirection.ltr,
                         textAlign: TextAlign.center,
+                        inputFormatters: <TextInputFormatter>[
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
                         onChanged: _onKeyboardChanged,
                         onSubmitted: (_) => _submit(),
                         style: Theme.of(context).textTheme.headlineSmall,
                         decoration: InputDecoration(
                           counterText: '',
-                          hintText: '•' * _target,
+                          hintText: context.tr('security.pinEnter'),
                           prefixIcon: const Icon(Icons.keyboard_alt_outlined),
                         ),
                       )
                     : PinPad(
                         key: const ValueKey<String>('pin_sheet_pad'),
                         enabled: !_busy,
-                        maxKeySize: _target > 8 ? 56 : 66,
+                        maxKeySize: MediaQuery.of(context).size.height > 760 ? 74 : 66,
                         onDigit: _push,
                         onBackspace: _pop,
                         onClearAll: _clear,
