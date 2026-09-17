@@ -198,7 +198,8 @@ class NotificationService {
     if (_initialized) {
       try {
         final NotificationAppLaunchDetails? details =
-            await _guardValue(_plugin.getNotificationAppLaunchDetails());
+            await _guardValue<NotificationAppLaunchDetails?>(
+                _plugin.getNotificationAppLaunchDetails());
         if (details?.didNotificationLaunchApp == true) {
           final NotifPayload? payload =
               NotifPayload.decode(details?.notificationResponse?.payload);
