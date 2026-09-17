@@ -7,7 +7,7 @@ import android.view.WindowManager
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.ByteArrayOutputStream
@@ -22,8 +22,11 @@ import java.io.InputStream
  * وقناة ثانية للحماية (injaz/security):
  * - authenticate: نافذة التعرّف على الوجه/البصمة (أو قفل الجهاز) قبل كشف
  *   تفاصيل المنبّه. تُعيد "ok" أو "failed" أو "unavailable".
+ *
+ * ملاحظة: نستخدم FlutterFragmentActivity لأن نافذة التعرّف (androidx.biometric)
+ * تحتاج FragmentActivity، وFlutterActivity العادية لا تصلح لذلك.
  */
-class MainActivity : FlutterActivity() {
+class MainActivity : FlutterFragmentActivity() {
 
     private val channelName = "injaz/files"
     private val saveRequest = 4001

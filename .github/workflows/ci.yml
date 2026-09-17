@@ -163,7 +163,9 @@ jobs:
               with open(path, encoding='utf-8', errors='replace') as fh:
                   raw = fh.read()
           keep = [ln for ln in raw.splitlines()
-                  if any(k in ln for k in ('error', 'Error', 'FAILURE', 'What went wrong', 'Caused by', 'Execution failed', 'Try:'))]
+                  if any(k in ln for k in ('error', 'Error', 'FAILURE', 'What went wrong',
+                                           'Caused by', 'Execution failed', 'Try:', 'Unresolved',
+                                           'e: file', 'e: ', 'w: '))]
           body = '\n'.join(keep[-60:]) if keep else raw[-4000:]
           if not body.strip():
               body = '(لا مخرجات)'
