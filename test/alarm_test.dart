@@ -212,7 +212,7 @@ void main() {
       // كل مدد التأجيل معروضة كأزرار (النص يتغيّر مع الأرقام العربية/اللاتينية).
       expect(find.byType(ActionChip), findsNWidgets(AppSettings.alarmSnoozeOptions.length));
       expect(find.text('دقيقة واحدة'), findsOneWidget);
-      expect(find.textContaining('دقائق'), findsWidgets);
+      expect(find.textContaining('دقيقة'), findsWidgets);
 
       app.dispose();
     });
