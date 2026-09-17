@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../core/enums.dart';
 import '../core/l10n/app_strings.dart';
 import '../core/l10n/date_names.dart';
@@ -71,6 +73,45 @@ class ReminderPlanner {
             taskId: task.id,
             withActions: settings.actionButtons,
           ));
+        }
+
+        // ===== منبّه المهام العاجلة =====
+        // أي مهمة أولويتها «عاجل» (ومنها مهام الخطط المختار لها عاجل) ترنّ
+        // كمنبّه بشاشة كاملة في وقتها — وبخصوصية: «منبّه» فقط حتى التحقّق.
+        if (settings.alarmEnabled && task.priority == TaskPriority.urgent) {
+          final int? anchor = task.startMinutes ?? task.reminderAtMinutes;
+          if (anchor != null) {
+            final DateTime when = Dates.at(day, anchor);
+            if (when.isAfter(n.add(const Duration(seconds: 25)))) {
+              final String alarmTitle =
+                  settings.alarmHideDetails ? l10n.t('alarm.title') : task.title;
+              final String alarmBody = settings.alarmHideDetails
+                  ? l10n.t('alarm.hiddenHint')
+                  : l10n.t('notif.taskBody', <String, String>{
+                      'time': DateNames.time(anchor,
+                          use24: settings.use24Hour,
+                          lang: lang,
+                          arabicDigits: settings.arabicDigits),
+                      'category': categoryName(task.categoryId),
+                    });
+              out.add(PlannedReminder(
+                id: idFor('${ReminderKind.alarm}:${task.id}'),
+                key: '${ReminderKind.alarm}:${task.id}',
+                when: when,
+                kind: ReminderKind.alarm,
+                title: alarmTitle,
+                body: alarmBody,
+                payload: jsonEncode(<String, dynamic>{
+                  'o': 'alarm',
+                  'k': ReminderKind.alarm.name,
+                  'i': task.id,
+                }),
+                taskId: task.id,
+                withActions: true,
+                fullScreen: true,
+              ));
+            }
+          }
         }
 
         // ===== التنبيه المتكرر حتى الإنجاز =====

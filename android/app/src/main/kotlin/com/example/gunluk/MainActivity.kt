@@ -4,6 +4,9 @@ import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.view.WindowManager
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
+import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -15,6 +18,10 @@ import java.io.InputStream
  * - saveFile: يفتح مستكشف الملفات ليختار المستخدم مكان الحفظ (SAF).
  * - pickFile: يفتح المستكشف لاختيار ملف نسخة احتياطية وقراءة محتواه.
  * - setSecure: يمنع التقاط الشاشة أو ظهور المحتوى في مبدّل التطبيقات.
+ *
+ * وقناة ثانية للحماية (injaz/security):
+ * - authenticate: نافذة التعرّف على الوجه/البصمة (أو قفل الجهاز) قبل كشف
+ *   تفاصيل المنبّه. تُعيد "ok" أو "failed" أو "unavailable".
  */
 class MainActivity : FlutterActivity() {
 
@@ -42,6 +49,77 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, securityChannel)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "available" -> result.success(canAuthenticate())
+                    "authenticate" -> authenticate(result)
+                    else -> result.notImplemented()
+                }
+            }
+    }
+
+    // ===== التعرّف على الوجه/البصمة =====
+
+    private val securityChannel = "injaz/security"
+    private var authResult: MethodChannel.Result? = null
+
+    /** هل يمكن للجهاز التحقّق (وجه/بصمة أو قفل شاشة)؟ */
+    private fun canAuthenticate(): Boolean {
+        val allowed = BiometricManager.Authenticators.BIOMETRIC_WEAK or
+            BiometricManager.Authenticators.DEVICE_CREDENTIAL
+        return BiometricManager.from(this).canAuthenticate(allowed) ==
+            BiometricManager.BIOMETRIC_SUCCESS
+    }
+
+    /** يعرض نافذة التحقّق ويُعيد النتيجة إلى دارت. */
+    private fun authenticate(result: MethodChannel.Result) {
+        if (!canAuthenticate()) {
+            result.success("unavailable")
+            return
+        }
+        if (authResult != null) {
+            result.error("busy", "هناك تحقّق جارٍ", null)
+            return
+        }
+        authResult = result
+        val executor = ContextCompat.getMainExecutor(this)
+        val prompt = BiometricPrompt(
+            this,
+            executor,
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(
+                    auth: BiometricPrompt.AuthenticationResult,
+                ) {
+                    authResult?.success("ok")
+                    authResult = null
+                }
+
+                override fun onAuthenticationError(code: Int, message: CharSequence) {
+                    authResult?.success("failed")
+                    authResult = null
+                }
+
+                override fun onAuthenticationFailed() {
+                    // محاولة فاشلة — تبقى النافذة معروضة للمحاولة مرة أخرى.
+                }
+            },
+        )
+        val info = BiometricPrompt.PromptInfo.Builder()
+            .setTitle("تأكيد الهوية")
+            .setSubtitle("أظهر وجهك أو استخدم قفل الجهاز لعرض التفاصيل")
+            .setAllowedAuthenticators(
+                BiometricManager.Authenticators.BIOMETRIC_WEAK or
+                    BiometricManager.Authenticators.DEVICE_CREDENTIAL,
+            )
+            .build()
+        try {
+            prompt.authenticate(info)
+        } catch (e: Exception) {
+            authResult?.success("unavailable")
+            authResult = null
+        }
     }
 
     private fun handleSaveFile(name: String?, bytes: ByteArray?, result: MethodChannel.Result) {

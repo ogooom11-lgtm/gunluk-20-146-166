@@ -190,6 +190,24 @@ class NotificationService {
       _initialized = false;
     }
     await refreshExactStatus();
+    await _deliverLaunchPayload();
+  }
+
+  /// عند فتح التطبيق من إشعار (وكان مغلقًا) نُسلّم محتواه لمعالج النقر.
+  Future<void> _deliverLaunchPayload() async {
+    if (_initialized) {
+      try {
+        final NotificationAppLaunchDetails? details =
+            await _guardValue(_plugin.getNotificationAppLaunchDetails());
+        if (details?.didNotificationLaunchApp == true) {
+          final NotifPayload? payload =
+              NotifPayload.decode(details?.notificationResponse?.payload);
+          if (payload != null) onTap?.call(payload);
+        }
+      } catch (_) {
+        // نُكمل بدون فتح شاشة المنبّه.
+      }
+    }
   }
 
   Future<void> refreshExactStatus() async {
@@ -293,6 +311,8 @@ class NotificationService {
 
   Importance _importanceFor(ReminderKind kind) {
     switch (kind) {
+      case ReminderKind.alarm:
+        return Importance.max;
       case ReminderKind.task:
       case ReminderKind.review:
       case ReminderKind.nudge:
@@ -305,6 +325,8 @@ class NotificationService {
 
   Priority _priorityFor(ReminderKind kind) {
     switch (kind) {
+      case ReminderKind.alarm:
+        return Priority.max;
       case ReminderKind.task:
       case ReminderKind.review:
       case ReminderKind.nudge:
@@ -346,12 +368,18 @@ class NotificationService {
     bool withActions = false,
     bool withLargeIcon = true,
     bool onlyAlertOnce = false,
+    bool fullScreen = false,
   }) {
+    final bool isAlarm = kind == ReminderKind.alarm;
     final AndroidNotificationSound? sound = settings.sound.resource == null
         ? null
         : RawResourceAndroidNotificationSound(settings.sound.resource!);
     final List<String> actions = <String>[];
-    if (withActions && settings.actionButtons) {
+    if (isAlarm) {
+      // المنبّه: تأجيل دائمًا متاح من الإشعار نفسه بلا حاجة لفتح التطبيق.
+      actions.add(NotifAction.snooze);
+      if (!settings.alarmHideDetails) actions.add(NotifAction.done);
+    } else if (withActions && settings.actionButtons) {
       actions.add(NotifAction.done);
       actions.add(NotifAction.snooze);
     }
@@ -366,9 +394,7 @@ class NotificationService {
       colorized: accent != null && kind == ReminderKind.review,
       playSound: settings.sound.resource != null,
       sound: sound,
-      enableVibration: settings.vibration != AppVibration.off,
-      vibrationPattern: settings.vibration.pattern,
-      category: AndroidNotificationCategory.reminder,
+      category: isAlarm ? AndroidNotificationCategory.alarm : AndroidNotificationCategory.reminder,
       styleInformation: lines.isEmpty
           ? BigTextStyleInformation(body, contentTitle: title, summaryText: l10n.t('app.name'))
           : InboxStyleInformation(lines, contentTitle: title, summaryText: body),
@@ -381,7 +407,9 @@ class NotificationService {
             action,
             action == NotifAction.done
                 ? l10n.t('notif.actionDone')
-                : l10n.t('notif.actionSnooze', <String, String>{'n': '${settings.snoozeMinutes}'}),
+                : l10n.t('notif.actionSnooze', <String, String>{
+                    'n': '${isAlarm ? settings.alarmSnoozeMinutes : settings.snoozeMinutes}',
+                  }),
             cancelNotification: action == NotifAction.done,
             showsUserInterface: false,
           ),
@@ -389,7 +417,19 @@ class NotificationService {
       ticker: title,
       subText: l10n.t('app.name'),
       onlyAlertOnce: onlyAlertOnce,
-      autoCancel: true,
+      autoCancel: !isAlarm,
+      // ===== المنبّه: شاشة كاملة + بقاء على الشاشة + خصوصية على قفل الجهاز =====
+      fullScreenIntent: isAlarm && fullScreen,
+      ongoing: isAlarm,
+      timeoutAfter: isAlarm ? 15 * 60 * 1000 : null,
+      visibility: isAlarm && settings.alarmHideDetails
+          ? NotificationVisibility.secret
+          : NotificationVisibility.public,
+      // اهتزاز منبّه متكرّر بدل النقرة الواحدة.
+      vibrationPattern: isAlarm
+          ? Int64List.fromList(<int>[0, 600, 300, 600, 300, 600])
+          : settings.vibration.pattern,
+      enableVibration: isAlarm ? true : settings.vibration != AppVibration.off,
     );
   }
 
@@ -438,6 +478,7 @@ class NotificationService {
                 withActions: reminder.withActions,
                 withLargeIcon: withLargeIcon,
                 onlyAlertOnce: reminder.kind == ReminderKind.nudge,
+                fullScreen: reminder.fullScreen,
               ),
             ),
             androidScheduleMode: mode,
@@ -504,6 +545,43 @@ class NotificationService {
       }
     }
     return false;
+  }
+
+  /// يجدول منبّهًا مؤجّلًا بعد d دقائق لنفس المهمة (يُستخدم من زر التأجيل).
+  Future<bool> scheduleAlarmLater({
+    required int id,
+    required String taskId,
+    required int minutes,
+    required AppSettings settings,
+    required AppLocalizations l10n,
+    String? title,
+    Color? accent,
+  }) async {
+    final DateTime when = DateTime.now().add(Duration(minutes: minutes));
+    if (!_initialized) await init();
+    await ensureChannels(settings, l10n);
+    final bool ok = await _guardCall(_plugin.zonedSchedule(
+      id,
+      settings.alarmHideDetails ? l10n.t('alarm.title') : (title ?? l10n.t('alarm.title')),
+      l10n.t('alarm.hiddenHint'),
+      TzService.from(when),
+      NotificationDetails(
+        android: _details(
+          settings,
+          l10n,
+          kind: ReminderKind.alarm,
+          title: settings.alarmHideDetails ? l10n.t('alarm.title') : (title ?? l10n.t('alarm.title')),
+          body: l10n.t('alarm.hiddenHint'),
+          accent: accent,
+          withActions: true,
+          fullScreen: true,
+        ),
+      ),
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+      payload: NotifPayload(op: 'alarm', taskId: taskId, kind: ReminderKind.alarm.name).encode(),
+    ));
+    return ok;
   }
 
   Future<void> cancel(int id) async {
@@ -666,22 +744,35 @@ Future<void> notificationTapBackground(NotificationResponse response) async {
       TzService.ensure();
       await service.init();
       await service.ensureChannels(settings, l10n);
-      final DateTime when = DateTime.now().add(Duration(minutes: settings.snoozeMinutes));
+      final bool isAlarm = payload.op == 'alarm' || payload.kind == ReminderKind.alarm.name;
+      final int minutes = isAlarm ? settings.alarmSnoozeMinutes : settings.snoozeMinutes;
+      final DateTime when = DateTime.now().add(Duration(minutes: minutes));
       final int id = ('snooze_${payload.taskId ?? 'x'}_${when.millisecondsSinceEpoch}').hashCode & 0x3FFFFFF;
-      await service.schedule(
-        PlannedReminder(
+      if (isAlarm) {
+        // المنبّه يبقى منبّهًا بشاشة كاملة بعد التأجيل.
+        await service.scheduleAlarmLater(
           id: id,
-          key: 'snooze:${payload.taskId}',
-          when: when,
-          kind: ReminderKind.fromName(payload.kind),
-          title: payload.title,
-          body: payload.body,
-          lines: payload.lines,
-          taskId: payload.taskId,
-        ),
-        settings,
-        l10n,
-      );
+          taskId: payload.taskId ?? '',
+          minutes: minutes,
+          settings: settings,
+          l10n: l10n,
+        );
+      } else {
+        await service.schedule(
+          PlannedReminder(
+            id: id,
+            key: 'snooze:${payload.taskId}',
+            when: when,
+            kind: ReminderKind.fromName(payload.kind),
+            title: payload.title,
+            body: payload.body,
+            lines: payload.lines,
+            taskId: payload.taskId,
+          ),
+          settings,
+          l10n,
+        );
+      }
       await repo.pushOp(<String, dynamic>{
         'op': 'snoozed',
         'taskId': payload.taskId,

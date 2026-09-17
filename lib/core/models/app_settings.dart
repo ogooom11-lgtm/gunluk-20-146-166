@@ -46,6 +46,10 @@ class AppSettings {
     this.lockGraceSeconds = 30,
     this.lockPinLength = 4,
     this.lockAutoUnlock = true,
+    this.alarmEnabled = true,
+    this.alarmHideDetails = true,
+    this.alarmRequireUnlock = true,
+    this.alarmSnoozeMinutes = 5,
     this.secureScreen = false,
     this.encryptBackupsByDefault = true,
     this.lastExport,
@@ -103,6 +107,10 @@ class AppSettings {
       lockWhenBackground: json['lb'] != false,
       lockGraceSeconds: (json['lg2'] as num?)?.toInt() ?? 30,
       lockPinLength: AppSettings.clampPinLength((json['ll'] as num?)?.toInt() ?? 0),
+      alarmEnabled: json['al'] != false,
+      alarmHideDetails: json['ah'] != false,
+      alarmRequireUnlock: json['au'] != false,
+      alarmSnoozeMinutes: (json['as'] as num?)?.toInt() ?? 5,
       lockAutoUnlock: json['lu'] != false,
       secureScreen: json['ss'] == true,
       encryptBackupsByDefault: json['eb'] != false,
@@ -189,6 +197,21 @@ class AppSettings {
 
   int lockPinLength;
 
+  /// منبّه الخطط العاجلة: يشمل كل مهمة أولويتها «عاجل».
+  bool alarmEnabled;
+
+  /// إخفاء تفاصيل المهمة في شاشة المنبّه وإشعاره حتى التحقّق من الهوية.
+  bool alarmHideDetails;
+
+  /// اشتراط التعرّف على الوجه/البصمة (أو رمز التطبيق) لإظهار التفاصيل.
+  bool alarmRequireUnlock;
+
+  /// مدة التأجيل الافتراضية للمنبّه بالدقائق.
+  int alarmSnoozeMinutes;
+
+  /// مدد التأجيل المتاحة في صفحة المنبّه.
+  static const List<int> alarmSnoozeOptions = <int>[1, 5, 10, 15, 30];
+
   /// فتح التطبيق تلقائيًا بمجرد اكتمال الرمز الصحيح.
   bool lockAutoUnlock;
 
@@ -253,6 +276,10 @@ class AppSettings {
     bool? lockWhenBackground,
     int? lockGraceSeconds,
     int? lockPinLength,
+    bool? alarmEnabled,
+    bool? alarmHideDetails,
+    bool? alarmRequireUnlock,
+    int? alarmSnoozeMinutes,
     bool? lockAutoUnlock,
     bool? secureScreen,
     bool? encryptBackupsByDefault,
@@ -302,6 +329,10 @@ class AppSettings {
         lockWhenBackground: lockWhenBackground ?? this.lockWhenBackground,
         lockGraceSeconds: lockGraceSeconds ?? this.lockGraceSeconds,
         lockPinLength: lockPinLength == null ? this.lockPinLength : AppSettings.clampPinLength(lockPinLength),
+        alarmEnabled: alarmEnabled ?? this.alarmEnabled,
+        alarmHideDetails: alarmHideDetails ?? this.alarmHideDetails,
+        alarmRequireUnlock: alarmRequireUnlock ?? this.alarmRequireUnlock,
+        alarmSnoozeMinutes: alarmSnoozeMinutes ?? this.alarmSnoozeMinutes,
         lockAutoUnlock: lockAutoUnlock ?? this.lockAutoUnlock,
         secureScreen: secureScreen ?? this.secureScreen,
         encryptBackupsByDefault: encryptBackupsByDefault ?? this.encryptBackupsByDefault,
@@ -352,6 +383,10 @@ class AppSettings {
         'lb': lockWhenBackground,
         'lg2': lockGraceSeconds,
         'll': lockPinLength,
+        'al': alarmEnabled,
+        'ah': alarmHideDetails,
+        'au': alarmRequireUnlock,
+        'as': alarmSnoozeMinutes,
         'lu': lockAutoUnlock,
         'ss': secureScreen,
         'eb': encryptBackupsByDefault,

@@ -14,6 +14,7 @@ class PlannedReminder {
     this.lines = const <String>[],
     this.withActions = true,
     this.taskId,
+    this.fullScreen = false,
   });
 
   /// معرّف الإشعار في نظام التشغيل (ثابت لكل عنصر/يوم).
@@ -33,6 +34,9 @@ class PlannedReminder {
 
   final bool withActions;
   final String? taskId;
+
+  /// منبّه: يُعرض كشاشة كاملة (fullScreenIntent) مع أزرار تأجيل.
+  final bool fullScreen;
 
   bool isInFuture(DateTime now) => when.isAfter(now.add(const Duration(seconds: 20)));
 

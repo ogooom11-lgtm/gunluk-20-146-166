@@ -6,6 +6,10 @@
     <!-- إعادة جدولة التذكيرات بعد إعادة تشغيل الجهاز -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- المنبّه: فتح شاشة كاملة وقت الاستحقاق -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <!-- التعرّف على الوجه/البصمة لعرض تفاصيل المنبّه -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application

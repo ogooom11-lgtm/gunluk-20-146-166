@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/enums.dart';
+import '../../core/models/app_settings.dart';
 import '../../core/l10n/app_strings.dart';
 import '../app_scope.dart';
 import '../widgets/common.dart';
@@ -16,6 +17,31 @@ import 'security_screen.dart';
 /// شاشة الإعدادات الرئيسية.
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
+
+  /// اختيار مدة التأجيل الافتراضية للمنبّه.
+  Future<void> _editAlarmSnooze(BuildContext context) async {
+    final AppSettings settings = context.appRead.settings;
+    final int? picked = await showChoiceSheet<int>(
+      context,
+      title: context.tr('alarm.snoozeDefault'),
+      subtitle: context.tr('alarm.settingsDesc'),
+      value: settings.alarmSnoozeMinutes,
+      options: <ChoiceItem<int>>[
+        for (final int n in AppSettings.alarmSnoozeOptions)
+          ChoiceItem<int>(
+            value: n,
+            label: n == 1
+                ? context.tr('alarm.minute1')
+                : context.tr('alarm.snoozeValue', <String, String>{'n': context.numStr(n)}),
+            icon: Icons.snooze_rounded,
+          ),
+      ],
+    );
+    if (picked == null || !context.mounted) return;
+    await context.appRead.updateSettings(
+      settings.copyWith(alarmSnoozeMinutes: picked),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -229,6 +255,56 @@ class SettingsScreen extends StatelessWidget {
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(builder: (_) => const NotificationSettingsScreen()),
                 ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          // ===== المنبّه (المهام العاجلة) =====
+          SettingsGroup(
+            title: context.tr('alarm.settingsGroup'),
+            subtitle: context.tr('alarm.settingsDesc'),
+            icon: Icons.notifications_active_rounded,
+            children: <Widget>[
+              SettingsSwitchTile(
+                title: context.tr('alarm.enabled'),
+                subtitle: context.tr('alarm.enabledDesc'),
+                icon: Icons.alarm_rounded,
+                value: settings.alarmEnabled,
+                onChanged: (bool value) => app.updateSettings(
+                  settings.copyWith(alarmEnabled: value, notificationsEnabled: true),
+                  rescheduleNotifications: true,
+                ),
+              ),
+              SettingsSwitchTile(
+                title: context.tr('alarm.hideDetails'),
+                subtitle: context.tr('alarm.hideDetailsDesc'),
+                icon: Icons.visibility_off_rounded,
+                value: settings.alarmHideDetails,
+                enabled: settings.alarmEnabled,
+                onChanged: (bool value) => app.updateSettings(
+                  settings.copyWith(alarmHideDetails: value),
+                  rescheduleNotifications: true,
+                ),
+              ),
+              SettingsSwitchTile(
+                title: context.tr('alarm.requireUnlock'),
+                subtitle: context.tr('alarm.requireUnlockDesc'),
+                icon: Icons.face_retouching_natural_rounded,
+                value: settings.alarmRequireUnlock,
+                enabled: settings.alarmEnabled && settings.alarmHideDetails,
+                onChanged: (bool value) => app.updateSettings(
+                  settings.copyWith(alarmRequireUnlock: value),
+                ),
+              ),
+              SettingsValueTile(
+                title: context.tr('alarm.snoozeDefault'),
+                value: settings.alarmSnoozeMinutes == 1
+                    ? context.tr('alarm.minute1')
+                    : context.tr('alarm.snoozeValue', <String, String>{
+                        'n': context.numStr(settings.alarmSnoozeMinutes),
+                      }),
+                icon: Icons.snooze_rounded,
+                onTap: settings.alarmEnabled ? () => _editAlarmSnooze(context) : null,
               ),
             ],
           ),

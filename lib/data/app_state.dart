@@ -1139,8 +1139,71 @@ class AppState extends ChangeNotifier {
   Future<int> pendingReminderCount() => notifications.pendingCount();
 
   void _handleNotificationTap(NotifPayload payload) {
+    // منبّه مهمة عاجلة: تُفتح شاشة المنبّه كاملة بدل التنقّل العادي.
+    if (payload.op == 'alarm' && payload.taskId != null) {
+      openAlarm(payload.taskId!);
+      return;
+    }
     // تفتح الواجهة التفاصيل بناءً على المحتوى — يُستهلك في RootShell
     lastTappedPayload = payload;
+    notifyListeners();
+  }
+
+  // ===== المنبّه (المهام العاجلة) =====
+
+  /// المهمة التي يرنّ منبّهها الآن — تعرض شاشة المنبّه كاملة فوق كل شيء.
+  String? activeAlarmTaskId;
+
+  Task? get activeAlarmTask =>
+      activeAlarmTaskId == null ? null : taskById(activeAlarmTaskId!);
+
+  void openAlarm(String taskId) {
+    if (taskById(taskId) == null) return;
+    activeAlarmTaskId = taskId;
+    notifyListeners();
+  }
+
+  void closeAlarm() {
+    if (activeAlarmTaskId == null) return;
+    activeAlarmTaskId = null;
+    notifyListeners();
+  }
+
+  /// إنجاز المهمة من شاشة المنبّه.
+  Future<void> completeAlarm() async {
+    final Task? task = activeAlarmTask;
+    closeAlarm();
+    if (task == null || task.done) return;
+    task.done = true;
+    task.completedAt = DateTime.now();
+    for (final Subtask s in task.subtasks) {
+      s.done = true;
+    }
+    _evaluateBadges();
+    _checkCelebration();
+    markDirty();
+    _scheduleReminderRebuild();
+  }
+
+  /// تأجيل المنبّه: يُجدول منبّه آخر بعد d دقائق بنفس المهمة.
+  Future<void> snoozeAlarm(int minutes) async {
+    final Task? task = activeAlarmTask;
+    closeAlarm();
+    if (task == null) return;
+    final AppLocalizations l10n = AppLocalizations.ofLocale(Locale(settings.language));
+    final int id = notifId(
+      '${ReminderKind.alarm}:snooze:${task.id}:${DateTime.now().millisecondsSinceEpoch}',
+    );
+    await notifications.init(onTap: _handleNotificationTap);
+    await notifications.scheduleAlarmLater(
+      id: id,
+      taskId: task.id,
+      minutes: minutes,
+      settings: settings,
+      l10n: l10n,
+      title: task.title,
+      accent: AppTheme.palette(settings).accent,
+    );
     notifyListeners();
   }
 

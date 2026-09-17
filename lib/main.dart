@@ -8,6 +8,7 @@ import 'data/app_state.dart';
 import 'theme/app_theme.dart';
 import 'ui/app_scope.dart';
 import 'ui/root_shell.dart';
+import 'ui/screens/alarm_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -106,7 +107,18 @@ class _InjaziAppState extends State<InjaziApp> with WidgetsBindingObserver {
                 ),
               );
             },
-            home: const RootShell(),
+            // شاشة المنبّه تظهر كطبقة كاملة فوق كل شيء (حتى فوق شاشة القفل):
+            // لا يكشف اسمها أو وصفها قبل التحقّق من الهوية.
+            home: Stack(
+              children: <Widget>[
+                const RootShell(),
+                if (app.activeAlarmTaskId != null)
+                  AlarmScreen(
+                    key: ValueKey<String>('alarm_${app.activeAlarmTaskId}'),
+                    taskId: app.activeAlarmTaskId!,
+                  ),
+              ],
+            ),
           );
         },
       ),
