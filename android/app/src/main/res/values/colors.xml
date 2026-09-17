@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- لون العلامة الأساسي — خلفية الأيقونة التكيفية وشاشة البداية -->
+    <color name="injaz_brand">#5B6BF0</color>
+    <color name="injaz_brand_dark">#0E1117</color>
+    <color name="injaz_splash">#EFF1FB</color>
+    <color name="ic_launcher_background">#4B4FD8</color>
+    <color name="injaz_notification">#5B6BF0</color>
+</resources>
