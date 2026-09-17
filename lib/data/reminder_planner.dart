@@ -4,6 +4,7 @@ import '../core/enums.dart';
 import '../core/l10n/app_strings.dart';
 import '../core/l10n/date_names.dart';
 import '../core/models/app_settings.dart';
+import '../core/models/day_note.dart';
 import '../core/models/planned_reminder.dart';
 import '../core/models/task.dart';
 import '../core/utils/dates.dart';
@@ -16,6 +17,7 @@ class ReminderPlanner {
   static List<PlannedReminder> build({
     required AppSettings settings,
     required List<Task> tasks,
+    List<DayNote> notes = const <DayNote>[],
     required AppLocalizations l10n,
     required int Function(String key) idFor,
     required String Function(String categoryId) categoryName,
@@ -169,6 +171,34 @@ class ReminderPlanner {
                 : pending.take(5).map((Task t) => _line(t, settings)).toList(),
             withActions: false,
           ));
+        }
+      }
+
+      // ===== تقييم اليوم =====
+      // إشعار يومي واحد: «كيف كان يومك؟» مع تقييم سريع من ثلاثة أزرار.
+      if (settings.ratingEnabled) {
+        final DateTime when = Dates.at(day, settings.ratingMinutes);
+        if (when.isAfter(n) || Dates.sameDay(day, n)) {
+          final bool rated = notes.any((DayNote note) =>
+              note.day == Dates.key(day) && note.mood >= 0);
+          final bool today = Dates.sameDay(day, n);
+          // لا نُزعج إن كان اليوم مُقيَّمًا بالفعل.
+          if (!(today && rated)) {
+            out.add(PlannedReminder(
+              id: idFor('${ReminderKind.rating}:${Dates.key(day)}'),
+              key: '${ReminderKind.rating}:${Dates.key(day)}',
+              when: when,
+              kind: ReminderKind.rating,
+              title: l10n.t('rate.notifTitle'),
+              body: l10n.t('rate.notifBody'),
+              payload: jsonEncode(<String, dynamic>{
+                'o': 'rate',
+                'k': ReminderKind.rating.name,
+                'd': Dates.key(day),
+              }),
+              withActions: true,
+            ));
+          }
         }
       }
 

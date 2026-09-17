@@ -14,6 +14,7 @@ import 'screens/focus_screen.dart';
 import 'screens/lock_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/plans_screen.dart';
+import 'screens/ratings_screen.dart';
 import 'screens/reports_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/splash_screen.dart';
@@ -40,8 +41,11 @@ class _RootShellState extends State<RootShell> {
   @override
   void initState() {
     super.initState();
-    _ticker = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted) setState(() {});
+    _ticker = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (!mounted) return;
+      // منبّه المهام العاجلة داخل التطبيق (حتى لو مُنعت الشاشة الكاملة للنظام).
+      context.appRead.checkDueAlarm();
+      setState(() {});
     });
   }
 
@@ -88,6 +92,13 @@ class _RootShellState extends State<RootShell> {
       if (payload.op == 'task' && payload.taskId != null) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) showTaskDetailsSheet(context, payload.taskId!);
+        });
+      } else if (payload.op == 'rate') {
+        // إشعار «قيّم يومك»: نفتح صفحة التقييم مباشرة على اليوم المقصود.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          final DateTime? day = payload.day == null ? null : Dates.parseKey(payload.day!);
+          showRatingSheet(context, day: day ?? Dates.today());
         });
       } else if (payload.op == 'focus') {
         // إشعار جلسة التركيز: نفتح المؤقّت مباشرة.

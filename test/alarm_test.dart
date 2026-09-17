@@ -3,10 +3,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gunluk/core/enums.dart';
 import 'package:gunluk/core/l10n/app_strings.dart';
 import 'package:gunluk/core/models/app_settings.dart';
+import 'package:gunluk/core/models/day_note.dart';
 import 'package:gunluk/core/models/planned_reminder.dart';
 import 'package:gunluk/core/models/task.dart';
+import 'package:gunluk/data/app_repository.dart';
 import 'package:gunluk/data/app_state.dart';
 import 'package:gunluk/data/reminder_planner.dart';
+import 'package:gunluk/services/notification_service.dart';
 import 'package:gunluk/theme/app_theme.dart';
 import 'package:gunluk/ui/app_scope.dart';
 import 'package:gunluk/ui/screens/alarm_screen.dart';
@@ -29,9 +32,15 @@ Task _urgent({String id = 't1', int? start = 600, String title = 'تسليم ا�
       notes: 'ملاحظات سرية عن التسليم',
     );
 
-List<PlannedReminder> _plan(AppSettings settings, List<Task> tasks) => ReminderPlanner.build(
+List<PlannedReminder> _plan(
+  AppSettings settings,
+  List<Task> tasks, {
+  List<DayNote> notes = const <DayNote>[],
+}) =>
+    ReminderPlanner.build(
       settings: settings,
       tasks: tasks,
+      notes: notes,
       l10n: AppLocalizations.ofLocale(const Locale('ar')),
       idFor: (String key) => key.hashCode & 0x3FFFFFF,
       categoryName: (String _) => 'عام',
@@ -215,6 +224,185 @@ void main() {
       expect(find.textContaining('دقيقة'), findsWidgets);
 
       app.dispose();
+    });
+  });
+
+  group('تقييم اليوم', () {
+    test('التقييم يُحفظ ويُقرأ (مع الحفاظ على الملاحظة)', () async {
+      final AppState app = _state();
+      await app.repo.ensure();
+      final DateTime day = DateTime(2026, 9, 17);
+
+      expect(app.ratingFor(day), -1, reason: 'لا تقييم بعد');
+      await app.saveNote(day, 'ملاحظة اليوم', 3);
+      expect(app.ratingFor(day), 3);
+      expect(app.noteFor(day)?.text, 'ملاحظة اليوم');
+
+      // تقييم بلا مساس بالملاحظة.
+      await app.rateDay(day, 1);
+      expect(app.ratingFor(day), 1);
+      expect(app.noteFor(day)?.text, 'ملاحظة اليوم');
+    });
+
+    test('متوسط الشهر وعدد الأيام المُقيَّمة', () async {
+      final AppState app = _state();
+      await app.repo.ensure();
+      await app.rateDay(DateTime(2026, 9, 1), 4);
+      await app.rateDay(DateTime(2026, 9, 2), 2);
+      await app.rateDay(DateTime(2026, 8, 20), 4);
+      await app.saveNote(DateTime(2026, 9, 3), 'بلا تقييم', -1);
+
+      // المتوسط بمقياس ١..٥: (٥ + ٣) / 2 = 4.0
+      expect(app.averageRating(2026, 9), 4.0);
+      expect(app.ratedCountIn(2026, 9), 2);
+      expect(app.averageRating(2026, 8), 5.0);
+      expect(app.averageRating(2026, 7), isNull);
+    });
+
+    test('تذكير «قيّم يومك» يُجدول مرة واحدة يوميًا', () {
+      final List<PlannedReminder> list = _plan(AppSettings(), <Task>[]);
+      final Iterable<PlannedReminder> ratings =
+          list.where((PlannedReminder r) => r.kind == ReminderKind.rating);
+      expect(ratings.length, 16, reason: 'يوم واحد لكل يوم في نافذة الجدولة');
+      final PlannedReminder first = ratings.first;
+      expect(first.when.hour, 21);
+      expect(first.when.minute, 30);
+      expect(first.payload, contains('"o":"rate"'));
+    });
+
+    test('لا تذكير إن كان اليوم مُقيَّمًا أو الخيار موقوفًا', () async {
+      final List<PlannedReminder> withRating = _plan(
+        AppSettings(),
+        <Task>[],
+        notes: <DayNote>[DayNote(day: '2026-09-17', mood: 4)],
+      );
+      expect(
+        withRating.firstWhere((PlannedReminder r) => r.kind == ReminderKind.rating).when.day,
+        18,
+        reason: 'اليوم المُقيَّم لا يُذكَّر فيه',
+      );
+
+      final AppSettings off = AppSettings()..ratingEnabled = false;
+      final List<PlannedReminder> none = _plan(off, <Task>[]);
+      expect(none.where((PlannedReminder r) => r.kind == ReminderKind.rating), isEmpty);
+    });
+
+    test('تقييم سريع من أزرار الإشعار يُطبَّق على اليوم', () async {
+      final AppState app = _state();
+      await app.repo.ensure();
+      final AppRepository repo = app.repo;
+      await repo.pushOp(<String, dynamic>{
+        'op': 'rate',
+        'value': 4,
+        'day': '2026-09-17',
+      });
+      await app.applyPendingOps();
+      expect(app.ratingFor(DateTime(2026, 9, 17)), 4);
+      expect(NotifAction.ratingFor(NotifAction.rate5), 4);
+      expect(NotifAction.ratingFor(NotifAction.rate1), 0);
+      expect(NotifAction.ratingFor(NotifAction.rate3), 2);
+    });
+  });
+
+  group('القفل عند مغادرة التطبيق', () {
+    test('يقفل بعد انتهاء مهلة السماح', () async {
+      final AppState app = _state();
+      await app.repo.ensure();
+      await app.setLockPassword('1234');
+      await app.updateSettings(app.settings.copyWith(
+        lockWhenBackground: true,
+        lockGraceSeconds: 0,
+      ));
+      expect(app.locked, isFalse, reason: 'الفتح بعد التعيين مباشرة');
+
+      app.handleBackgrounded();
+      expect(app.locked, isTrue, reason: 'مهلة صفر ⇒ قفل فوري');
+
+      app.handleResumed();
+      expect(app.locked, isTrue);
+    });
+
+    test('مهلة ٣٠ ثانية: لا يقفل قبل انتهائها', () async {
+      final AppState app = _state();
+      await app.repo.ensure();
+      await app.setLockPassword('1234');
+      await app.updateSettings(app.settings.copyWith(
+        lockWhenBackground: true,
+        lockGraceSeconds: 30,
+      ));
+
+      app.handleBackgrounded();
+      expect(app.locked, isFalse);
+      // عودة سريعة ⇒ يبقى مفتوحًا.
+      app.handleResumed();
+      expect(app.locked, isFalse);
+    });
+
+    test('مؤقّت القفل يعمل حتى لو لم يعد التطبيق للواجهة', () async {
+      final AppState app = _state();
+      await app.repo.ensure();
+      await app.setLockPassword('1234');
+      await app.updateSettings(app.settings.copyWith(
+        lockWhenBackground: true,
+        lockGraceSeconds: 1,
+      ));
+
+      app.handleBackgrounded();
+      expect(app.locked, isFalse);
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+      expect(app.locked, isTrue, reason: 'المؤقّت الداخلي قفل التطبيق');
+      app.dispose();
+    });
+
+    test('حالة inactive القصيرة لا تقفل', () async {
+      final AppState app = _state();
+      await app.repo.ensure();
+      await app.setLockPassword('1234');
+      await app.updateSettings(app.settings.copyWith(
+        lockWhenBackground: true,
+        lockGraceSeconds: 0,
+      ));
+
+      app.handlePossiblyLeaving();
+      expect(app.locked, isFalse, reason: 'لم يمضِ ٣ ثوانٍ بعد');
+      app.handleResumed();
+      await Future<void>.delayed(const Duration(milliseconds: 3500));
+      expect(app.locked, isFalse, reason: 'العودة تُلغي العدّاد');
+      app.dispose();
+    });
+  });
+
+  group('منبّه التطبيق الداخلي', () {
+    test('يرصد المهمة العاجلة التي حان وقتها مرة واحدة', () async {
+      final AppState app = _state();
+      await app.repo.ensure();
+      app.tasks.add(_urgent(start: 480)); // 08:00 والآن 08:00
+
+      final Task? due = app.dueAlarmTask();
+      expect(due?.id, 't1');
+      app.checkDueAlarm();
+      expect(app.activeAlarmTaskId, 't1', reason: 'فُتح المنبّه داخل التطبيق');
+      app.closeAlarm();
+      app.checkDueAlarm();
+      expect(app.activeAlarmTaskId, isNull, reason: 'لا يتكرّر في نفس اليوم');
+    });
+
+    test('لا منبّه لمهمة لم يحن وقتها أو غير عاجلة', () async {
+      final AppState app = _state();
+      await app.repo.ensure();
+      app.tasks.add(_urgent(start: 900)); // 15:00
+      expect(app.dueAlarmTask(), isNull);
+
+      app.tasks.clear();
+      final Task normal = Task(
+        id: 't3',
+        title: 'عادية',
+        date: DateTime(2026, 9, 17),
+        priority: TaskPriority.high,
+        startMinutes: 480,
+      );
+      app.tasks.add(normal);
+      expect(app.dueAlarmTask(), isNull);
     });
   });
 }

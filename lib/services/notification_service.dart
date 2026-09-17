@@ -8,6 +8,7 @@ import '../core/enums.dart';
 import '../core/l10n/app_strings.dart';
 import '../core/models/app_settings.dart';
 import '../core/models/planned_reminder.dart';
+import '../core/utils/dates.dart';
 import '../data/app_repository.dart';
 import 'tz_service.dart';
 
@@ -16,6 +17,25 @@ class NotifAction {
   NotifAction._();
   static const String done = 'act_done';
   static const String snooze = 'act_snooze';
+
+  /// تقييم سريع من الإشعار (١ = سيء … ٥ = ممتاز).
+  static const String rate1 = 'act_rate1';
+  static const String rate3 = 'act_rate3';
+  static const String rate5 = 'act_rate5';
+
+  /// يحوّل معرّف الزر إلى تقييم من ٠ إلى ٤ (كما يُخزَّن).
+  static int? ratingFor(String? actionId) {
+    switch (actionId) {
+      case rate1:
+        return 0;
+      case rate3:
+        return 2;
+      case rate5:
+        return 4;
+      default:
+        return null;
+    }
+  }
 }
 
 /// محتوى الإشعار المرمّز داخل الحقل payload — يسمح بإعادة جدولة التذكير
@@ -320,6 +340,7 @@ class NotificationService {
         return Importance.high;
       case ReminderKind.upcoming:
       case ReminderKind.morning:
+      case ReminderKind.rating:
         return Importance.defaultImportance;
     }
   }
@@ -334,6 +355,7 @@ class NotificationService {
         return Priority.high;
       case ReminderKind.upcoming:
       case ReminderKind.morning:
+      case ReminderKind.rating:
         return Priority.defaultPriority;
     }
   }
@@ -380,6 +402,11 @@ class NotificationService {
       // المنبّه: تأجيل دائمًا متاح من الإشعار نفسه بلا حاجة لفتح التطبيق.
       actions.add(NotifAction.snooze);
       if (!settings.alarmHideDetails) actions.add(NotifAction.done);
+    } else if (kind == ReminderKind.rating) {
+      // تقييم سريع بثلاث لمسات من الإشعار نفسه.
+      actions.add(NotifAction.rate5);
+      actions.add(NotifAction.rate3);
+      actions.add(NotifAction.rate1);
     } else if (withActions && settings.actionButtons) {
       actions.add(NotifAction.done);
       actions.add(NotifAction.snooze);
@@ -408,10 +435,16 @@ class NotificationService {
             action,
             action == NotifAction.done
                 ? l10n.t('notif.actionDone')
-                : l10n.t('notif.actionSnooze', <String, String>{
-                    'n': '${isAlarm ? settings.alarmSnoozeMinutes : settings.snoozeMinutes}',
-                  }),
-            cancelNotification: action == NotifAction.done,
+                : action == NotifAction.rate5
+                    ? l10n.t('rate.action5')
+                    : action == NotifAction.rate3
+                        ? l10n.t('rate.action3')
+                        : action == NotifAction.rate1
+                            ? l10n.t('rate.action1')
+                            : l10n.t('notif.actionSnooze', <String, String>{
+                                'n': '${isAlarm ? settings.alarmSnoozeMinutes : settings.snoozeMinutes}',
+                              }),
+            cancelNotification: action != NotifAction.snooze,
             showsUserInterface: false,
           ),
       ],
@@ -726,6 +759,20 @@ Future<void> notificationTapBackground(NotificationResponse response) async {
     if (payload == null) return;
     final AppRepository repo = AppRepository();
     await repo.ensure();
+
+    final int? quickRating = NotifAction.ratingFor(response.actionId);
+    if (quickRating != null) {
+      await repo.pushOp(<String, dynamic>{
+        'op': 'rate',
+        'value': quickRating,
+        'day': payload.day ?? Dates.key(DateTime.now()),
+        'at': DateTime.now().toIso8601String(),
+      });
+      final NotificationService service = NotificationService();
+      await service.init();
+      await service.cancelAll();
+      return;
+    }
 
     if (response.actionId == NotifAction.done) {
       await repo.pushOp(<String, dynamic>{

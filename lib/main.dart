@@ -62,6 +62,10 @@ class _InjaziAppState extends State<InjaziApp> with WidgetsBindingObserver {
     } else if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
       widget.state.handleBackgrounded();
       widget.state.flush();
+    } else if (state == AppLifecycleState.inactive) {
+      // «inactive» يحدث عند سحب شريط الإشعارات أو فتح مبدّل التطبيقات أو ظهور
+      // نافذة نظام — ننتظر قليلًا: إن طال الغياب نعدّه مغادرة ونبدأ عدّاد القفل.
+      widget.state.handlePossiblyLeaving();
     }
   }
 

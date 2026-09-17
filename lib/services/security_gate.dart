@@ -5,14 +5,16 @@ import '../core/l10n/app_strings.dart';
 import '../core/models/app_settings.dart';
 import '../data/app_state.dart';
 import '../ui/app_scope.dart';
+import '../ui/screens/face_scan_screen.dart';
 import '../ui/widgets/pin_sheet.dart';
 
 /// التحقّق من هوية صاحب الجهاز قبل كشف محتوى المنبّه.
 ///
 /// الترتيب:
 ///   1. التعرّف على الوجه/البصمة (قفل الجهاز نفسه) عبر قناة أصلية.
-///   2. إن لم يتوفّر: رمز التطبيق نفسه (نفس قفل التطبيق).
-///   3. إن لم يكن هناك أي قفل على الإطلاق: لا شيء لنحميه ⇒ نُظهر التفاصيل.
+///   2. كاميرا التطبيق: مسح الوجه بالكاميرا الأمامية (إن مُفعّلة).
+///   3. رمز التطبيق.
+///   4. إن لم يكن هناك أي قفل على الإطلاق: لا شيء لنحميه ⇒ نُظهر التفاصيل.
 Future<bool> verifyIdentityForAlarm(BuildContext context) async {
   final AppState app = context.appRead;
   if (!app.settings.alarmRequireUnlock) return true;
@@ -23,7 +25,14 @@ Future<bool> verifyIdentityForAlarm(BuildContext context) async {
 
   if (!context.mounted) return false;
 
-  // (2) رمز التطبيق.
+  // (2) كاميرا التطبيق (مسح وجه داخل التطبيق بلا إنترنت).
+  if (app.settings.alarmUseCamera) {
+    final bool scanned = await scanFaceWithCamera(context);
+    if (scanned) return true;
+    if (!context.mounted) return false;
+  }
+
+  // (3) رمز التطبيق.
   if (app.settings.lockEnabled && app.settings.lockHash.isNotEmpty) {
     final bool usePasscode = await _askPasscode(context, unavailable: result == 'unavailable');
     if (!usePasscode) return false;
@@ -104,5 +113,18 @@ Future<void> openAlarmFullScreenSettings() async {
     // لا شيء: القناة غير متاحة (اختبارات أو سطح مكتب).
   } on PlatformException {
     // تجاهل.
+  }
+}
+
+/// مسح الوجه بكاميرا التطبيق. تعيد true عند نجاح المسح.
+Future<bool> scanFaceWithCamera(BuildContext context) async {
+  try {
+    final bool? ok = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(builder: (_) => const FaceScanScreen()),
+    );
+    return ok ?? false;
+  } catch (_) {
+    // لا كاميرا أو تعذّر العرض — نُكمل بالخيارات الأخرى.
+    return false;
   }
 }

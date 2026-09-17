@@ -137,6 +137,25 @@ class AppState extends ChangeNotifier {
   /// وقت آخر انتقال للخلفية (لحساب مهلة السماح).
   DateTime? _backgroundedAt;
 
+  /// يقفل التطبيق تلقائيًا بعد انتهاء مهلة السماح وهو في الخلفية.
+  Timer? _lockTimer;
+
+  /// مؤقّت قصير لحالة «inactive» قبل اعتبارها مغادرة فعلية.
+  Timer? _inactiveTimer;
+
+  /// حالة «inactive»: قد تكون مغادرة حقيقية (مبدّل تطبيقات) أو لمسة سريعة
+  /// (شريط إشعارات أو نافذة نظام) — ننتظر ٣ ثوانٍ قبل اعتبارها مغادرة.
+  void handlePossiblyLeaving() {
+    if (!lockEnabled || !settings.lockWhenBackground) return;
+    _inactiveTimer?.cancel();
+    _inactiveTimer = Timer(const Duration(seconds: 3), () {
+      // نافذة تحقّق المنبّه ليست مغادرة للتطبيق.
+      if (activeAlarmTaskId != null) return;
+      if (_backgroundedAt != null) return;
+      handleBackgrounded();
+    });
+  }
+
   /// الشارات المفتوحة وتاريخ فتحها.
   final Map<String, DateTime> badges = <String, DateTime>{};
 
@@ -640,6 +659,40 @@ class AppState extends ChangeNotifier {
 
   // ===== ملاحظات وجلسات =====
 
+  /// تقييم اليوم (٠ = سيء … ٤ = ممتاز، و-1 = لم يُقيَّم بعد).
+  int ratingFor(DateTime day) => noteFor(day)?.mood ?? -1;
+
+  /// يحفظ تقييم اليوم (مع الحفاظ على الملاحظة المكتوبة).
+  Future<void> rateDay(DateTime day, int rating) async {
+    final DayNote? existing = noteFor(day);
+    await saveNote(day, existing?.text ?? '', rating);
+  }
+
+  /// الأيام المُقيَّمة مرتبة من الأحدث (مع ملاحظاتها).
+  List<DayNote> ratedNotes({bool onlyRated = true}) {
+    final List<DayNote> list = notes
+        .where((DayNote n) => !onlyRated || n.mood >= 0 || n.text.trim().isNotEmpty)
+        .toList()
+      ..sort((DayNote a, DayNote b) => b.day.compareTo(a.day));
+    return list;
+  }
+
+  /// متوسط التقييمات لشهر معيّن (month = 1..12): يعيد null إن لم يوجد تقييم.
+  double? averageRating(int year, int month) {
+    final String prefix = '${year.toString().padLeft(4, '0')}-${month.toString().padLeft(2, '0')}';
+    final List<DayNote> monthNotes =
+        notes.where((DayNote n) => n.day.startsWith(prefix) && n.mood >= 0).toList();
+    if (monthNotes.isEmpty) return null;
+    final int sum = monthNotes.fold<int>(0, (int acc, DayNote n) => acc + n.mood);
+    return (sum + monthNotes.length) / monthNotes.length;
+  }
+
+  /// عدد الأيام المُقيَّمة في شهر معيّن.
+  int ratedCountIn(int year, int month) {
+    final String prefix = '${year.toString().padLeft(4, '0')}-${month.toString().padLeft(2, '0')}';
+    return notes.where((DayNote n) => n.day.startsWith(prefix) && n.mood >= 0).length;
+  }
+
   DayNote? noteFor(DateTime day) {
     final String key = Dates.key(day);
     for (final DayNote n in notes) {
@@ -1049,6 +1102,7 @@ class AppState extends ChangeNotifier {
       l10n: l10n,
       idFor: notifId,
       categoryName: categoryName,
+      notes: notes,
       windowDays: 16,
     );
     // تذكير انتهاء جلسة التركيز: يُجدول كإشعار عادي حتى يصل وقتها حتى لو
@@ -1157,6 +1211,71 @@ class AppState extends ChangeNotifier {
   Task? get activeAlarmTask =>
       activeAlarmTaskId == null ? null : taskById(activeAlarmTaskId!);
 
+  /// مفاتيح المنبّهات التي رنّت (أو أُنجزت/أُجّلت) فلا تتكرّر في نفس اليوم.
+  final Set<String> _alarmShown = <String>{};
+
+  /// مهمّات عاجلة حان وقتها ولم يُعرض منبّهها بعد.
+  ///
+  /// تعمل داخل التطبيق نفسه كلما كان مفتوحًا — حتى لو منع النظام الشاشة
+  /// الكاملة للإشعار، فالمنبّه يظهر في التطبيق.
+  Task? dueAlarmTask({DateTime? at}) {
+    if (!settings.alarmEnabled) return null;
+    if (activeAlarmTaskId != null) return null;
+    final DateTime now = at ?? clock();
+    final List<Task> candidates = tasks
+        .where((Task t) =>
+            !t.done &&
+            !t.skipped &&
+            t.priority == TaskPriority.urgent &&
+            t.startMinutes != null &&
+            Dates.sameDay(t.date, now))
+        .toList()
+      ..sort((Task a, Task b) => (a.startMinutes ?? 0).compareTo(b.startMinutes ?? 0));
+    for (final Task task in candidates) {
+      final int minute = task.startMinutes!;
+      final DateTime when = Dates.at(task.date, minute);
+      if (when.isAfter(now)) continue;
+      // نسمح بالرنّ خلال ٣٠ دقيقة من وقتها (لا منبّهات قديمة من الصباح).
+      if (now.difference(when).inMinutes > 30) continue;
+      if (_alarmShown.contains('${task.id}:${Dates.key(task.date)}:$minute')) continue;
+      return task;
+    }
+    return null;
+  }
+
+  /// يفتح المنبّه إن حان وقت مهمة عاجلة (تُستدعى دوريًا من الواجهة).
+  void checkDueAlarm() {
+    final Task? task = dueAlarmTask();
+    if (task == null) return;
+    _alarmShown.add('${task.id}:${Dates.key(task.date)}:${task.startMinutes}');
+    openAlarm(task.id);
+  }
+
+  /// «تجربة المنبّه»: نُظهره فورًا على مهمة عاجلة قادمة أو على أي مهمة.
+  Future<bool> testAlarm() async {
+    final DateTime now = clock();
+    final Task? urgent = tasks.firstWhere(
+      (Task t) => !t.done && t.priority == TaskPriority.urgent && Dates.sameDay(t.date, now),
+      orElse: () => tasks.firstWhere(
+        (Task t) => !t.done && t.startMinutes != null && Dates.sameDay(t.date, now),
+        orElse: () => Task(
+          id: 'alarm_test',
+          title: this.l10n.t('alarm.testTaskTitle'),
+          date: Dates.day(now),
+          priority: TaskPriority.urgent,
+          startMinutes: Dates.nowMinutes(),
+          notes: this.l10n.t('alarm.testTaskNotes'),
+        ),
+      ),
+    );
+    if (!tasks.any((Task t) => t.id == urgent.id)) {
+      tasks.add(urgent);
+      markDirty();
+    }
+    openAlarm(urgent.id);
+    return true;
+  }
+
   void openAlarm(String taskId) {
     if (taskById(taskId) == null) return;
     activeAlarmTaskId = taskId;
@@ -1225,6 +1344,29 @@ class AppState extends ChangeNotifier {
     for (final Map<String, dynamic> op in ops) {
       final String type = (op['op'] ?? '').toString();
       final String? taskId = op['taskId']?.toString();
+      if (type == 'rate') {
+        final int value = (op['value'] as num?)?.toInt() ?? -1;
+        final String? dayKey = op['day']?.toString();
+        if (value >= 0 && dayKey != null) {
+          final DateTime? day = Dates.parseKey(dayKey);
+          if (day != null) {
+            final DayNote? existing = noteFor(day);
+            final int index = notes.indexWhere((DayNote n) => n.day == dayKey);
+            if (index >= 0) {
+              notes[index].mood = value;
+              notes[index].updatedAt = DateTime.now();
+            } else {
+              notes.add(DayNote(
+                day: dayKey,
+                text: existing?.text ?? '',
+                mood: value,
+                updatedAt: DateTime.now(),
+              ));
+            }
+          }
+        }
+        continue;
+      }
       if (type == 'done' && taskId != null) {
         final Task? task = taskById(taskId);
         if (task != null && !task.done) {
@@ -1427,8 +1569,19 @@ class AppState extends ChangeNotifier {
   /// عند انتقال التطبيق للخلفية.
   void handleBackgrounded() {
     _backgroundedAt = DateTime.now();
-    if (lockEnabled && settings.lockWhenBackground && settings.lockGraceSeconds <= 0) {
-      locked = true;
+    _lockTimer?.cancel();
+    if (lockEnabled && settings.lockWhenBackground) {
+      if (settings.lockGraceSeconds <= 0) {
+        locked = true;
+      } else {
+        // حتى لو لم يعُد التطبيق للواجهة، يُقفل بعد انتهاء المهلة (مؤقّت داخلي).
+        _lockTimer = Timer(Duration(seconds: settings.lockGraceSeconds), () {
+          if (!lockEnabled || !settings.lockWhenBackground) return;
+          if (locked) return;
+          locked = true;
+          notifyListeners();
+        });
+      }
     }
     // آخر تحديث لإشعار جلسة التركيز قبل تجميد التطبيق في الخلفية.
     if (focusRunning) unawaited(_refreshFocusNotification(force: true));
@@ -1439,6 +1592,8 @@ class AppState extends ChangeNotifier {
   void handleResumed() {
     final DateTime? at = _backgroundedAt;
     _backgroundedAt = null;
+    _lockTimer?.cancel();
+    _inactiveTimer?.cancel();
     if (!lockEnabled) {
       if (locked) locked = false;
       notifyListeners();
@@ -1539,6 +1694,8 @@ class AppState extends ChangeNotifier {
 
   @override
   void dispose() {
+    _lockTimer?.cancel();
+    _inactiveTimer?.cancel();
     _focusTimer?.cancel();
     _saveTimer?.cancel();
     _reminderTimer?.cancel();

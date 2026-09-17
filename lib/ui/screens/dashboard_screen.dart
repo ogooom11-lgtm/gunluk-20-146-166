@@ -19,6 +19,7 @@ import '../widgets/task_tile.dart';
 import 'achievements_screen.dart';
 import 'events_screen.dart';
 import 'focus_screen.dart';
+import 'ratings_screen.dart';
 import 'plan_details_screen.dart';
 import 'reports_screen.dart';
 import 'search_screen.dart';
@@ -776,11 +777,29 @@ class DashboardScreen extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           ),
           const Divider(height: 22),
-          Text(context.tr('home.mood'), style: Theme.of(context).textTheme.labelMedium),
-          const SizedBox(height: 6),
-          MoodPicker(
-            value: note?.mood ?? -1,
-            onChanged: (int value) => app.saveNote(Dates.today(), note?.text ?? '', value),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  context.tr('rate.dayTitle'),
+                  style: Theme.of(context).textTheme.labelMedium,
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(builder: (_) => const RatingsScreen()),
+                ),
+                child: Text(context.tr('rate.open')),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Center(
+            child: StarRow(
+              value: note?.mood ?? -1,
+              size: 34,
+              onChanged: (int value) => app.saveNote(Dates.today(), note?.text ?? '', value),
+            ),
           ),
           const SizedBox(height: 8),
           _JournalEditor(

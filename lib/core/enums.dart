@@ -140,7 +140,8 @@ enum ReminderKind {
   nudge('channel.nudgeName', 'channel.nudgeDesc'),
   review('channel.reviewName', 'channel.reviewDesc'),
   morning('channel.morningName', 'channel.morningDesc'),
-  alarm('channel.alarmName', 'channel.alarmDesc');
+  alarm('channel.alarmName', 'channel.alarmDesc'),
+  rating('channel.ratingName', 'channel.ratingDesc');
 
   const ReminderKind(this.nameKey, this.descKey);
   final String nameKey;

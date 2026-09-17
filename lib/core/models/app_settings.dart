@@ -49,7 +49,10 @@ class AppSettings {
     this.alarmEnabled = true,
     this.alarmHideDetails = true,
     this.alarmRequireUnlock = true,
+    this.alarmUseCamera = true,
     this.alarmSnoozeMinutes = 5,
+    this.ratingEnabled = true,
+    this.ratingMinutes = 21 * 60 + 30,
     this.secureScreen = false,
     this.encryptBackupsByDefault = true,
     this.lastExport,
@@ -110,7 +113,10 @@ class AppSettings {
       alarmEnabled: json['al'] != false,
       alarmHideDetails: json['ah'] != false,
       alarmRequireUnlock: json['au'] != false,
+      alarmUseCamera: json['ac'] != false,
       alarmSnoozeMinutes: (json['as'] as num?)?.toInt() ?? 5,
+      ratingEnabled: json['re'] != false,
+      ratingMinutes: (json['rm'] as num?)?.toInt() ?? (21 * 60 + 30),
       lockAutoUnlock: json['lu'] != false,
       secureScreen: json['ss'] == true,
       encryptBackupsByDefault: json['eb'] != false,
@@ -209,8 +215,17 @@ class AppSettings {
   /// مدة التأجيل الافتراضية للمنبّه بالدقائق.
   int alarmSnoozeMinutes;
 
+  /// استخدام كاميرا التطبيق لمسح الوجه عند اشتراط التحقّق.
+  bool alarmUseCamera;
+
   /// مدد التأجيل المتاحة في صفحة المنبّه.
   static const List<int> alarmSnoozeOptions = <int>[1, 5, 10, 15, 30];
+
+  /// تذكير «قيّم يومك» اليومي (يُسجَّل التقييم ويُحفظ).
+  bool ratingEnabled;
+
+  /// وقت تذكير التقييم بالدقائق من منتصف الليل (افتراضيًا ٢١:٣٠).
+  int ratingMinutes;
 
   /// فتح التطبيق تلقائيًا بمجرد اكتمال الرمز الصحيح.
   bool lockAutoUnlock;
@@ -279,7 +294,10 @@ class AppSettings {
     bool? alarmEnabled,
     bool? alarmHideDetails,
     bool? alarmRequireUnlock,
+    bool? alarmUseCamera,
     int? alarmSnoozeMinutes,
+    bool? ratingEnabled,
+    int? ratingMinutes,
     bool? lockAutoUnlock,
     bool? secureScreen,
     bool? encryptBackupsByDefault,
@@ -332,7 +350,10 @@ class AppSettings {
         alarmEnabled: alarmEnabled ?? this.alarmEnabled,
         alarmHideDetails: alarmHideDetails ?? this.alarmHideDetails,
         alarmRequireUnlock: alarmRequireUnlock ?? this.alarmRequireUnlock,
+        alarmUseCamera: alarmUseCamera ?? this.alarmUseCamera,
         alarmSnoozeMinutes: alarmSnoozeMinutes ?? this.alarmSnoozeMinutes,
+        ratingEnabled: ratingEnabled ?? this.ratingEnabled,
+        ratingMinutes: ratingMinutes ?? this.ratingMinutes,
         lockAutoUnlock: lockAutoUnlock ?? this.lockAutoUnlock,
         secureScreen: secureScreen ?? this.secureScreen,
         encryptBackupsByDefault: encryptBackupsByDefault ?? this.encryptBackupsByDefault,
@@ -386,7 +407,10 @@ class AppSettings {
         'al': alarmEnabled,
         'ah': alarmHideDetails,
         'au': alarmRequireUnlock,
+        'ac': alarmUseCamera,
         'as': alarmSnoozeMinutes,
+        're': ratingEnabled,
+        'rm': ratingMinutes,
         'lu': lockAutoUnlock,
         'ss': secureScreen,
         'eb': encryptBackupsByDefault,

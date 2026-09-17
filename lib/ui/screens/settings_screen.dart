@@ -14,6 +14,7 @@ import 'appearance_screen.dart';
 import 'backup_screen.dart';
 import 'categories_screen.dart';
 import 'notification_settings_screen.dart';
+import 'ratings_screen.dart';
 import 'security_screen.dart';
 
 /// شاشة الإعدادات الرئيسية.
@@ -261,6 +262,52 @@ class SettingsScreen extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 18),
+          // ===== تقييم اليوم =====
+          SettingsGroup(
+            title: context.tr('rate.settings'),
+            subtitle: context.tr('rate.settingsDesc'),
+            icon: Icons.star_rounded,
+            children: <Widget>[
+              SettingsSwitchTile(
+                title: context.tr('rate.enabled'),
+                subtitle: context.tr('rate.enabledDesc'),
+                icon: Icons.notifications_none_rounded,
+                value: settings.ratingEnabled,
+                onChanged: (bool value) => app.updateSettings(
+                  settings.copyWith(ratingEnabled: value, notificationsEnabled: true),
+                  rescheduleNotifications: true,
+                ),
+              ),
+              SettingsValueTile(
+                title: context.tr('rate.time'),
+                value: context.timeStr(settings.ratingMinutes),
+                icon: Icons.schedule_rounded,
+                onTap: settings.ratingEnabled
+                    ? () async {
+                        final int? picked = await showTimeWheelSheet(
+                          context,
+                          title: context.tr('rate.time'),
+                          initialMinutes: settings.ratingMinutes,
+                        );
+                        if (picked == null || !context.mounted) return;
+                        await context.appRead.updateSettings(
+                          settings.copyWith(ratingMinutes: picked),
+                          rescheduleNotifications: true,
+                        );
+                      }
+                    : null,
+              ),
+              SettingsTile(
+                title: context.tr('rate.open'),
+                subtitle: context.tr('rate.openDesc'),
+                icon: Icons.insights_rounded,
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(builder: (_) => const RatingsScreen()),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
           // ===== المنبّه (المهام العاجلة) =====
           SettingsGroup(
             title: context.tr('alarm.settingsGroup'),
@@ -289,6 +336,16 @@ class SettingsScreen extends StatelessWidget {
                 ),
               ),
               SettingsSwitchTile(
+                title: context.tr('alarm.useCamera'),
+                subtitle: context.tr('alarm.useCameraDesc'),
+                icon: Icons.photo_camera_front_rounded,
+                value: settings.alarmUseCamera,
+                enabled: settings.alarmEnabled && settings.alarmHideDetails,
+                onChanged: (bool value) => app.updateSettings(
+                  settings.copyWith(alarmUseCamera: value),
+                ),
+              ),
+              SettingsSwitchTile(
                 title: context.tr('alarm.requireUnlock'),
                 subtitle: context.tr('alarm.requireUnlockDesc'),
                 icon: Icons.face_retouching_natural_rounded,
@@ -297,6 +354,12 @@ class SettingsScreen extends StatelessWidget {
                 onChanged: (bool value) => app.updateSettings(
                   settings.copyWith(alarmRequireUnlock: value),
                 ),
+              ),
+              SettingsValueTile(
+                title: context.tr('alarm.test'),
+                subtitle: context.tr('alarm.testDesc'),
+                icon: Icons.play_circle_outline_rounded,
+                onTap: settings.alarmEnabled ? () => context.appRead.testAlarm() : null,
               ),
               SettingsValueTile(
                 title: context.tr('alarm.fullScreen'),

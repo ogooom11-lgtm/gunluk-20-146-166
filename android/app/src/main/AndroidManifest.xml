@@ -10,6 +10,10 @@
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <!-- التعرّف على الوجه/البصمة لعرض تفاصيل المنبّه -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <!-- كاميرا التطبيق لمسح الوجه (اختيارية: يكفي قفل الجهاز إن لم تتوفّر) -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera.front" android:required="false" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
