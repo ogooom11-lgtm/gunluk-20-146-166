@@ -7,7 +7,6 @@ import '../../core/utils/dates.dart';
 import '../../data/app_state.dart';
 import '../app_scope.dart';
 import '../widgets/common.dart';
-import '../widgets/pickers.dart';
 import '../widgets/settings_tiles.dart';
 
 /// صفحة «تقييمات الأيام»: كل يوم قيّمته + ملخص الشهر حسب التقييمات اليومية.

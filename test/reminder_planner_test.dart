@@ -84,7 +84,11 @@ void main() {
           _task(id: 'future', title: 'بلا وقت', date: kNow),
         ],
       );
-      expect(list.where((PlannedReminder r) => r.kind != ReminderKind.review), isEmpty);
+      expect(
+        list.where((PlannedReminder r) =>
+            r.kind != ReminderKind.review && r.kind != ReminderKind.rating),
+        isEmpty,
+      );
     });
 
     test('تذكير بوقت محدّد للمهمة بلا ساعة', () {

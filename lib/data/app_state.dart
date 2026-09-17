@@ -1254,17 +1254,17 @@ class AppState extends ChangeNotifier {
   /// «تجربة المنبّه»: نُظهره فورًا على مهمة عاجلة قادمة أو على أي مهمة.
   Future<bool> testAlarm() async {
     final DateTime now = clock();
-    final Task? urgent = tasks.firstWhere(
+    final Task urgent = tasks.firstWhere(
       (Task t) => !t.done && t.priority == TaskPriority.urgent && Dates.sameDay(t.date, now),
       orElse: () => tasks.firstWhere(
         (Task t) => !t.done && t.startMinutes != null && Dates.sameDay(t.date, now),
         orElse: () => Task(
           id: 'alarm_test',
-          title: this.l10n.t('alarm.testTaskTitle'),
+          title: l10n.t('alarm.testTaskTitle'),
           date: Dates.day(now),
           priority: TaskPriority.urgent,
           startMinutes: Dates.nowMinutes(),
-          notes: this.l10n.t('alarm.testTaskNotes'),
+          notes: l10n.t('alarm.testTaskNotes'),
         ),
       ),
     );

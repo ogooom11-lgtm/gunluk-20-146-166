@@ -14,13 +14,12 @@ import '../widgets/common.dart';
 import '../widgets/day_timeline.dart';
 import '../widgets/event_editor_sheet.dart';
 import '../widgets/progress_ring.dart';
-import '../widgets/selectors.dart';
 import '../widgets/task_tile.dart';
 import 'achievements_screen.dart';
 import 'events_screen.dart';
 import 'focus_screen.dart';
-import 'ratings_screen.dart';
 import 'plan_details_screen.dart';
+import 'ratings_screen.dart';
 import 'reports_screen.dart';
 import 'search_screen.dart';
 

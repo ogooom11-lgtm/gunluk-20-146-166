@@ -49,6 +49,7 @@ class NotifPayload {
     this.title = '',
     this.body = '',
     this.lines = const <String>[],
+    this.notifId,
   });
 
   /// task | review | morning | focus
@@ -60,6 +61,9 @@ class NotifPayload {
   final String body;
   final List<String> lines;
 
+  /// رقم الإشعار المجدول (يُستخدم لإلغاء تذكير واحد دون المساس بالبقية).
+  final int? notifId;
+
   String encode() => jsonEncode(<String, dynamic>{
         'o': op,
         'k': kind,
@@ -68,6 +72,7 @@ class NotifPayload {
         't': title,
         'b': body,
         'l': lines,
+        if (notifId != null) 'n': notifId,
       });
 
   static NotifPayload? decode(String? raw) {
@@ -91,6 +96,7 @@ class NotifPayload {
         title: (map['t'] ?? '').toString(),
         body: (map['b'] ?? '').toString(),
         lines: lines,
+        notifId: (map['n'] as num?)?.toInt(),
       );
     } catch (_) {
       return null;
@@ -770,7 +776,11 @@ Future<void> notificationTapBackground(NotificationResponse response) async {
       });
       final NotificationService service = NotificationService();
       await service.init();
-      await service.cancelAll();
+      // نُخفي تذكير التقييم وحده (لا نمسّ بقية التذكيرات المجدولة).
+      final int? notifId = payload.notifId;
+      if (notifId != null) {
+        await service.cancel(notifId);
+      }
       return;
     }
 

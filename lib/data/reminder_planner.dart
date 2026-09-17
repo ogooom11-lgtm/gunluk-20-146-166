@@ -184,17 +184,21 @@ class ReminderPlanner {
           final bool today = Dates.sameDay(day, n);
           // لا نُزعج إن كان اليوم مُقيَّمًا بالفعل.
           if (!(today && rated)) {
+            final String key = '${ReminderKind.rating}:${Dates.key(day)}';
+            final int id = idFor(key);
             out.add(PlannedReminder(
-              id: idFor('${ReminderKind.rating}:${Dates.key(day)}'),
-              key: '${ReminderKind.rating}:${Dates.key(day)}',
+              id: id,
+              key: key,
               when: when,
               kind: ReminderKind.rating,
               title: l10n.t('rate.notifTitle'),
               body: l10n.t('rate.notifBody'),
+              // 'n' = رقم الإشعار نفسه حتى نُلغيه وحده بعد التقييم السريع.
               payload: jsonEncode(<String, dynamic>{
                 'o': 'rate',
                 'k': ReminderKind.rating.name,
                 'd': Dates.key(day),
+                'n': id,
               }),
               withActions: true,
             ));

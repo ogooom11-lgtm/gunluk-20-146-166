@@ -48,7 +48,7 @@ Future<bool> verifyIdentityForAlarm(BuildContext context) async {
     }
   }
 
-  // (3) لا قفل على الإطلاق.
+  // (4) لا قفل على الإطلاق.
   return true;
 }
 

@@ -355,7 +355,7 @@ class SettingsScreen extends StatelessWidget {
                   settings.copyWith(alarmRequireUnlock: value),
                 ),
               ),
-              SettingsValueTile(
+              SettingsTile(
                 title: context.tr('alarm.test'),
                 subtitle: context.tr('alarm.testDesc'),
                 icon: Icons.play_circle_outline_rounded,
