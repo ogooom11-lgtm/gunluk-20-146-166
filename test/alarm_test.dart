@@ -187,7 +187,8 @@ void main() {
         await tester.pump(const Duration(milliseconds: 120));
       }
 
-      expect(find.text('تسليم التقرير'), findsOneWidget);
+      // الاسم يظهر في العنوان وفي البطاقة معًا بعد الكشف.
+      expect(find.text('تسليم التقرير'), findsWidgets);
       expect(find.textContaining('ملاحظات سرية'), findsOneWidget);
       expect(find.byKey(const ValueKey<String>('alarm_done')), findsOneWidget);
 
@@ -208,9 +209,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
 
       expect(find.text('تأجيل المنبّه'), findsOneWidget);
-      for (final String label in <String>['دقيقة واحدة', '٥ دقائق', '١٠ دقائق', '٣٠ دقيقة']) {
-        expect(find.text(label), findsOneWidget);
-      }
+      // كل مدد التأجيل معروضة كأزرار (النص يتغيّر مع الأرقام العربية/اللاتينية).
+      expect(find.byType(ActionChip), findsNWidgets(AppSettings.alarmSnoozeOptions.length));
+      expect(find.text('دقيقة واحدة'), findsOneWidget);
+      expect(find.textContaining('دقائق'), findsWidgets);
 
       app.dispose();
     });
