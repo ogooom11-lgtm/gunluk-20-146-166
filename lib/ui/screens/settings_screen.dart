@@ -367,7 +367,7 @@ class SettingsScreen extends StatelessWidget {
             children: <Widget>[
               SettingsTile(
                 title: context.tr('about.title'),
-                subtitle: context.tr('about.version', <String, String>{'v': '1.0.6'}),
+                subtitle: context.tr('about.version', <String, String>{'v': '1.0.7'}),
                 icon: Icons.apps_rounded,
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(builder: (_) => const AboutScreen()),
@@ -385,7 +385,7 @@ class SettingsScreen extends StatelessWidget {
           const SizedBox(height: 16),
           Center(
             child: Text(
-              '${context.tr('app.name')} • ${context.tr('about.version', <String, String>{'v': '1.0.6'})}',
+              '${context.tr('app.name')} • ${context.tr('about.version', <String, String>{'v': '1.0.7'})}',
               style: Theme.of(context).textTheme.labelSmall,
             ),
           ),

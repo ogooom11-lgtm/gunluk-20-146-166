@@ -46,7 +46,7 @@ class AboutScreen extends StatelessWidget {
                 Text(context.tr('app.tagline'), style: Theme.of(context).textTheme.bodyMedium),
                 const SizedBox(height: 10),
                 Pill(
-                  label: context.tr('about.version', <String, String>{'v': '1.0.6'}),
+                  label: context.tr('about.version', <String, String>{'v': '1.0.7'}),
                   color: context.palette.seed,
                   dense: true,
                 ),
