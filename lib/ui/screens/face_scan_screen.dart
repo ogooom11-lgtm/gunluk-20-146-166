@@ -7,7 +7,6 @@ import 'package:flutter/services.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
 import '../../core/l10n/app_strings.dart';
-import '../../theme/app_theme.dart';
 import '../app_scope.dart';
 
 /// مسح الوجه بكاميرا التطبيق (بلا إنترنت): يعرض الكاميرا الأمامية داخل حلقة
