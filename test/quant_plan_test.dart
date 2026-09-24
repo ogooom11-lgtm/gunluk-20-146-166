@@ -80,12 +80,12 @@ void main() {
       final Task? tomorrow = app.taskFor('p1', DateTime(2026, 9, 18));
       expect(tomorrow?.amountTarget, 72, reason: '٤٢٨ ÷ ٦ = ٧٢');
 
-      // أنجزت أكثر بكثير في اليوم الأول ⇒ يقلّ المطلوب، وتُخفى المطالبة عند
-      // اكتمال الهدف كله.
-      await app.logPlanAmount('p1', DateTime(2026, 9, 17), 428);
+      // أنجزت الهدف كله في اليوم الأول ⇒ لا مطالبة بعد اليوم.
+      await app.logPlanAmount('p1', DateTime(2026, 9, 17), 500);
       expect(plan.remainingAmount, 0);
       expect(plan.requiredOn(DateTime(2026, 9, 18)), 0, reason: 'اكتمل الهدف');
       expect(app.taskFor('p1', DateTime(2026, 9, 18))?.amountTarget, 0);
+      expect(plan.amountRatio, 1, reason: 'النسبة ١٠٠٪ بعد إكمال الهدف');
       app.dispose();
     });
 

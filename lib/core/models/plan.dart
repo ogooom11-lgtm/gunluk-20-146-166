@@ -275,6 +275,8 @@ class Plan {
 
   /// جدول الأيام القادمة: كم يجب أن تنجز كل يوم (يتعدّل مع ما تسجّله).
   List<PlanDayAmount> schedule({DateTime? from, int maxDays = 14}) {
+    // لا معنى للجدول الكمّي في خطة بلا هدف: نُعيد فارغة بدل أرقام صفرية.
+    if (!isQuantified) return const <PlanDayAmount>[];
     final DateTime start = Dates.day(from ?? Dates.today());
     final DateTime end = Dates.day(endDate ?? start);
     final List<DateTime> days = <DateTime>[];

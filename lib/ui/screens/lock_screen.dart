@@ -9,6 +9,7 @@ import '../../theme/app_theme.dart';
 import '../app_scope.dart';
 import '../widgets/pin_pad.dart';
 import '../widgets/pickers.dart';
+import '../widgets/progress_ring.dart';
 
 /// شاشة القفل: لوحة أرقام مخصّصة + نقاط متحرّكة + فتح تلقائي اختياري.
 ///
@@ -228,16 +229,6 @@ class _LockScreenState extends State<LockScreen> with SingleTickerProviderStateM
       _shake++;
     });
     HapticFeedback.heavyImpact();
-  }
-
-  void _toastMessage(String message, {bool error = false}) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: error ? const Color(0xFFE05B5B) : null,
-      ),
-    );
   }
 
   @override
