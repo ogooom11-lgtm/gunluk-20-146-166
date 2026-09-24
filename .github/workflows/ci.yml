@@ -97,7 +97,8 @@ jobs:
           hits = []
           for line in tlines:
               st = line.strip()
-              if '[E]' in st or st.startswith('/home/') or re.match(
+              if st.startswith('>>>') or st.startswith('--- الملف') or st.startswith('===') \
+                      or '[E]' in st or st.startswith('/home/') or re.match(
                       r'^(Expected|Actual|Which|Error|Exception|.*Exception|Incorrect use|The following|.*overflowed)', st):
                   if len(st) > 200:
                       st = st[:200] + '…'

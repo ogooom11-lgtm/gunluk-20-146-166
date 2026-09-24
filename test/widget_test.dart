@@ -47,7 +47,7 @@ List<DayStat> _weekStats() => <DayStat>[
 
 void main() {
   testWidgets('البطاقات والعناصر الأساسية تُرسم وتستجيب للمس', (WidgetTester tester) async {
-    final AppState app = AppState();
+    final AppState app = AppState(useIsolates: false);
     int taps = 0;
 
     await tester.pumpWidget(
@@ -81,7 +81,7 @@ void main() {
   });
 
   testWidgets('صف المهمة وحلقة التقدّم يعرضان المحتوى', (WidgetTester tester) async {
-    final AppState app = AppState();
+    final AppState app = AppState(useIsolates: false);
     final Task task = Task(id: 't1', title: 'مراجعة الدرس', date: Dates.today());
 
     await tester.pumpWidget(
@@ -107,7 +107,7 @@ void main() {
   });
 
   testWidgets('الرسوم البيانية تُرسم بدون أخطاء', (WidgetTester tester) async {
-    final AppState app = AppState();
+    final AppState app = AppState(useIsolates: false);
     final List<DayStat> week = _weekStats();
 
     await tester.pumpWidget(
@@ -138,7 +138,7 @@ void main() {
   });
 
   testWidgets('السمة والألوان تُبنى لكل الأوضاع', (WidgetTester tester) async {
-    final AppState app = AppState();
+    final AppState app = AppState(useIsolates: false);
     expect(AppTheme.light(app.settings).brightness, Brightness.light);
     expect(AppTheme.dark(app.settings).brightness, Brightness.dark);
     expect(AppTheme.palette(app.settings).seed, Palettes.all.first.seed);
@@ -150,7 +150,7 @@ void main() {
   });
 
   testWidgets('الترجمة تعمل بالعربية والإنجليزية', (WidgetTester tester) async {
-    final AppState app = AppState();
+    final AppState app = AppState(useIsolates: false);
     await tester.pumpWidget(_harness(app, const Text('مرحبا')));
     await tester.pumpAndSettle();
     final BuildContext context = tester.element(find.byType(Scaffold));

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
@@ -29,6 +30,19 @@ import 'reminder_planner.dart';
 /// ترميز بيانات التطبيق إلى نص JSON — تُنفَّذ في عزلة منفصلة (compute)
 /// كي لا تتجمّد الواجهة عند حفظ أرشيف كبير.
 String encodeDataTask(Map<String, dynamic> data) => jsonEncode(data);
+
+/// هل نعمل داخل `flutter test`؟
+///
+/// داخل الاختبارات يعمل زمن اصطناعي لا تُسلَّم فيه نتائج العزلات، فتظلّ
+/// `compute` معلّقة بلا نهاية ويبدو المُشغّل كأنه تعلّق. لذلك نُكمل العمل
+/// على الخيط الرئيسي في الاختبارات فقط، وتبقى العزلة للتطبيق الحقيقي.
+bool _inTestRun() {
+  try {
+    return Platform.environment['FLUTTER_TEST'] == 'true';
+  } catch (_) {
+    return false;
+  }
+}
 
 /// حالة التطبيق المركزية: البيانات، الإحصاءات، الإشعارات، والتعديلات.
 class AppState extends ChangeNotifier {
@@ -364,8 +378,7 @@ class AppState extends ChangeNotifier {
       while (_dirty) {
         _dirty = false;
         final Map<String, dynamic> data = exportData();
-        final String raw =
-            useIsolates ? await compute(encodeDataTask, data) : encodeDataTask(data);
+        final String raw = await _encodeData(data);
         await repo.ensure();
         await repo.writeRaw(raw);
       }
@@ -1786,8 +1799,19 @@ class AppState extends ChangeNotifier {
     Map<String, dynamic> Function(Map<String, dynamic>) task,
     Map<String, dynamic> args,
   ) async {
-    if (!useIsolates) return task(args);
+    if (!useIsolates || _inTestRun()) return task(args);
     return compute(task, args);
+  }
+
+  /// ترميز البيانات نصًّا: في عزلة منفصلة إن أمكن، مع مهلة زمنية تُكمل العمل
+  /// على الخيط الرئيسي إن لم تستجب العزلة — فلا يبقى الحفظ معلّقًا أبدًا.
+  Future<String> _encodeData(Map<String, dynamic> data) async {
+    if (!useIsolates || _inTestRun()) return encodeDataTask(data);
+    try {
+      return await compute(encodeDataTask, data).timeout(const Duration(seconds: 6));
+    } catch (_) {
+      return encodeDataTask(data);
+    }
   }
 
   Future<void> resetAll() async {

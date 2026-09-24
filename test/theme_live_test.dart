@@ -11,7 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   testWidgets('تغيير السمة واللغة يُطبَّق مباشرة على الواجهة', (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
-    final AppState app = AppState();
+    final AppState app = AppState(useIsolates: false);
 
     await tester.pumpWidget(InjaziApp(state: app));
     await tester.pump();
