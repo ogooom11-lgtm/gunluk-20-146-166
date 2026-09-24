@@ -1,122 +1,131 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
-void main() {
-  runApp(const MyApp());
+import 'core/enums.dart';
+import 'core/l10n/app_strings.dart';
+import 'data/app_state.dart';
+import 'theme/app_theme.dart';
+import 'ui/app_scope.dart';
+import 'ui/root_shell.dart';
+import 'ui/screens/alarm_screen.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // شريط حالة شفاف مع أيقونات متناسقة
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    systemNavigationBarColor: Colors.transparent,
+  ));
+  SystemChrome.setPreferredOrientations(<DeviceOrientation>[
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
+
+  final AppState state = AppState();
+  runApp(InjaziApp(state: state));
+  // التهيئة في الخلفية كي لا تتأخر الواجهة الأولى
+  await state.initOnce();
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+/// الواجهة الجذرية للتطبيق.
+class InjaziApp extends StatefulWidget {
+  const InjaziApp({super.key, required this.state});
 
-  // This widget is the root of your application.
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
-    );
-  }
-}
-
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+  final AppState state;
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<InjaziApp> createState() => _InjaziAppState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+class _InjaziAppState extends State<InjaziApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
   }
 
   @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // استقبال أي عمليات نُفّذت من أزرار الإشعارات أثناء إغلاق التطبيق
+      widget.state.refreshFromStorage();
+      widget.state.rebuildReminders(immediate: true);
+      widget.state.handleResumed();
+    } else if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
+      widget.state.handleBackgrounded();
+      widget.state.flush();
+    } else if (state == AppLifecycleState.inactive) {
+      // «inactive» يحدث عند سحب شريط الإشعارات أو فتح مبدّل التطبيقات أو ظهور
+      // نافذة نظام — ننتظر قليلًا: إن طال الغياب نعدّه مغادرة ونبدأ عدّاد القفل.
+      widget.state.handlePossiblyLeaving();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
-    return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+    return AppScope(
+      state: widget.state,
+      // يعيد بناء MaterialApp عند أي تغيير في الحالة، فتسري السمة واللغة
+      // والاتجاه وحجم الخط فورًا من الإعدادات.
+      child: ListenableBuilder(
+        listenable: widget.state,
+        builder: (BuildContext context, Widget? _) {
+          final AppState app = widget.state;
+          final settings = app.settings;
+          final ThemeMode mode = switch (settings.themeMode) {
+            AppThemeMode.dark => ThemeMode.dark,
+            AppThemeMode.light => ThemeMode.light,
+            AppThemeMode.system => ThemeMode.system,
+          };
+
+          return MaterialApp(
+            title: 'إنجازي',
+            debugShowCheckedModeBanner: false,
+            locale: Locale(settings.language),
+            supportedLocales: const <Locale>[Locale('ar'), Locale('en')],
+            localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            theme: AppTheme.light(settings),
+            darkTheme: AppTheme.dark(settings),
+            themeMode: mode,
+            builder: (BuildContext context, Widget? child) {
+              final MediaQueryData mq = MediaQuery.of(context);
+              final double scaled = (mq.textScaler.scale(1.0) * settings.fontScale).clamp(0.8, 1.8);
+              return MediaQuery(
+                data: mq.copyWith(textScaler: TextScaler.linear(scaled)),
+                child: Directionality(
+                  textDirection: settings.isArabic ? TextDirection.rtl : TextDirection.ltr,
+                  child: child ?? const SizedBox.shrink(),
+                ),
+              );
+            },
+            // شاشة المنبّه تظهر كطبقة كاملة فوق كل شيء (حتى فوق شاشة القفل):
+            // لا يكشف اسمها أو وصفها قبل التحقّق من الهوية.
+            home: Stack(
+              children: <Widget>[
+                const RootShell(),
+                if (app.activeAlarmTaskId != null)
+                  AlarmScreen(
+                    key: ValueKey<String>('alarm_${app.activeAlarmTaskId}'),
+                    taskId: app.activeAlarmTaskId!,
+                  ),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
 }

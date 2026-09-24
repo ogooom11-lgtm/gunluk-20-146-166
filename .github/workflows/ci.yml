@@ -1,0 +1,179 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - '**'
+  workflow_dispatch:
+    inputs:
+      build_apk:
+        description: 'بناء ملف APK للتحميل'
+        type: boolean
+        default: true
+      run_tests:
+        description: 'تشغيل الاختبارات'
+        type: boolean
+        default: true
+
+jobs:
+  analyze:
+    name: تحليل الشيفرة
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      # قناة stable تضمن أحدث إصدار مستقر (يحتاج المشروع Dart ‏3.8.1 أو أحدث)
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: معلومات البيئة
+        run: flutter --version
+      - name: تحضير الحزم
+        run: flutter pub get
+      - name: التحليل
+        run: |
+          set -o pipefail
+          flutter analyze 2>&1 | tee "$RUNNER_TEMP/analyze.txt"
+      - name: الاختبارات
+        if: ${{ always() && (github.event_name != 'workflow_dispatch' || inputs.run_tests) }}
+        run: |
+          set -o pipefail
+          # مهلة خارجية على كل خطوة: أي تعليق ينتهي ويفشل بوضوح مع نشر آخر السطور.
+          {
+            echo "=== تشخيص: تشغيل كل ملف اختبار على حدة (يكشف أي ملف يتعلّق) ==="
+            for f in test/*_test.dart; do
+              echo "--- الملف: $f"
+              timeout 150 flutter test "$f" --reporter compact --timeout 45s 2>&1 | tail -2 \
+                || echo ">>> تعلّق أو فشل: $f"
+            done
+            echo "=== تشغيل كل الاختبارات ==="
+            timeout 600 flutter test --reporter expanded --timeout 60s
+          } 2>&1 | tee "$RUNNER_TEMP/test.txt"
+      # ينشر ملخّص التحليل/الاختبارات كتعليق على الـ commit لأن سجلات Actions غير قابلة للقراءة من بيئة التطوير.
+      - name: نشر تقرير الفشل
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ANALYZE_LOG: ${{ runner.temp }}/analyze.txt
+          TEST_LOG: ${{ runner.temp }}/test.txt
+        run: |
+          python3 <<'PY'
+          import collections, json, os, re, subprocess
+
+
+          def read(path):
+              if not os.path.exists(path):
+                  return ''
+              with open(path, encoding='utf-8', errors='replace') as fh:
+                  return fh.read()
+
+
+          analyze = read(os.environ['ANALYZE_LOG'])
+          tests = read(os.environ['TEST_LOG'])
+          flow = re.compile(r'^(error|warning|info)\s+•\s+(.*?)\s+•\s+(\S+):(\d+):(\d+)\s+•\s+(\S+)$')
+          groups = collections.OrderedDict()
+          other = []
+          for line in analyze.splitlines():
+              m = flow.match(line.strip())
+              if m:
+                  sev, msg, path, ln, col, code = m.groups()
+                  g = groups.setdefault((path, code), {'n': 0, 'msg': msg, 'sev': sev, 'at': []})
+                  g['n'] += 1
+                  if len(g['at']) < 3:
+                      g['at'].append('%s:%s' % (ln, col))
+              elif line.strip() and 'Analyzing' not in line:
+                  other.append(line.strip())
+
+          body = 'ملاحظات التحليل: %d في %d (ملف/رمز)\n\n' % (
+              sum(g['n'] for g in groups.values()), len(groups))
+          for (path, code), g in groups.items():
+              body += '%s ×%d [%s] %s • %s\n' % (path, g['n'], g['sev'], g['msg'][:90], code)
+          if other and not groups:
+              body += '--- مخرجات التحليل ---\n' + '\n'.join(other[:25]) + '\n'
+
+          tlines = tests.splitlines()
+          hits = []
+          for line in tlines:
+              st = line.strip()
+              if st.startswith('>>>') or st.startswith('--- الملف') or st.startswith('===') \
+                      or '[E]' in st or st.startswith('/home/') or re.match(
+                      r'^(Expected|Actual|Which|Error|Exception|.*Exception|Incorrect use|The following|.*overflowed)', st):
+                  if len(st) > 200:
+                      st = st[:200] + '…'
+                  hits.append(st)
+          body += '\n--- الاختبارات ---\n' + '\n'.join(hits[-40:])
+          if not hits:
+              body += '(لا مخرجات)'
+          body += '\n\n--- ذيل سجل الاختبارات ---\n' + tests[-1200:]
+
+          data = json.dumps({'body': 'تقرير CI\n\n```\n' + body[:30000] + '\n```'})
+          url = ('https://api.github.com/repos/%s/commits/%s/comments'
+                 % (os.environ['GITHUB_REPOSITORY'], os.environ['GITHUB_SHA']))
+          subprocess.run(['curl', '-sS', '-X', 'POST',
+                          '-H', 'Authorization: Bearer ' + os.environ['GITHUB_TOKEN'],
+                          '-H', 'Accept: application/vnd.github+json', url, '-d', data], check=False)
+          PY
+
+  apk:
+    name: بناء APK
+    needs: analyze
+    # يُبنى عند وجود [apk] في رسالة الـ commit (لتنزيله من صفحة Actions)
+    # أو عند التشغيل اليدوي حسب المدخل build_apk.
+    if: ${{ contains(github.event.head_commit.message, '[apk]') || (github.event_name == 'workflow_dispatch' && inputs.build_apk) }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: تحضير الحزم
+        run: flutter pub get
+      - name: بناء نسخة الإصدار
+        run: |
+          set -o pipefail
+          flutter build apk --release 2>&1 | tee "$RUNNER_TEMP/build.txt"
+      - name: رفع الملف
+        uses: actions/upload-artifact@v4
+        with:
+          name: injazi-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 30
+      # نشر مخرجات البناء كتعليق على الـ commit عند الفشل (سجلات Actions غير قابلة للقراءة من بيئة التطوير).
+      - name: نشر تقرير البناء
+        if: failure()
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          BUILD_LOG: ${{ runner.temp }}/build.txt
+        run: |
+          python3 <<'PY'
+          import json, os, subprocess
+
+          path = os.environ['BUILD_LOG']
+          raw = ''
+          if os.path.exists(path):
+              with open(path, encoding='utf-8', errors='replace') as fh:
+                  raw = fh.read()
+          keep = [ln for ln in raw.splitlines()
+                  if any(k in ln for k in ('error', 'Error', 'FAILURE', 'What went wrong',
+                                           'Caused by', 'Execution failed', 'Try:', 'Unresolved',
+                                           'e: file', 'e: ', 'w: '))]
+          body = '\n'.join(keep[-60:]) if keep else raw[-4000:]
+          if not body.strip():
+              body = '(لا مخرجات)'
+          data = json.dumps({'body': 'تقرير بناء APK\n\n```\n' + body[-20000:] + '\n```'})
+          url = ('https://api.github.com/repos/%s/commits/%s/comments'
+                 % (os.environ['GITHUB_REPOSITORY'], os.environ['GITHUB_SHA']))
+          subprocess.run(['curl', '-sS', '-X', 'POST',
+                          '-H', 'Authorization: Bearer ' + os.environ['GITHUB_TOKEN'],
+                          '-H', 'Accept: application/vnd.github+json', url, '-d', data], check=False)
+          PY

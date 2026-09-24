@@ -11,6 +11,8 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        // مطلوب لمكتبة الإشعارات (java.time على الإصدارات الأقدم)
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
@@ -20,25 +22,49 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.gunluk"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        applicationId = "com.injazi.daily"
+        minSdk = 23
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        resourceConfigurations += listOf("ar", "en")
+    }
+
+    signingConfigs {
+        // مفتاح توقيع تجريبي ثابت مرفوع مع المستودع، والغرض منه أن تكون كل
+        // نسخ CI موقّعة بنفس المفتاح فتُثبَّت النسخة الجديدة فوق القديمة مباشرة.
+        // (مفتاح التصحيح التلقائي كان يُعاد توليده في كل تشغيل، فيرفض النظام
+        // التحديث برسالة «التطبيق غير مثبَّت»).
+        // للنشر على المتجر: استبدله بمفتاحك الخاص ولا ترفعه للمستودع أبدًا.
+        create("injazi") {
+            storeFile = file("injazi-test-signing.p12")
+            storeType = "PKCS12"
+            storePassword = "injazi2026"
+            keyAlias = "injazi"
+            keyPassword = "injazi2026"
+        }
     }
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // نستخدم المفتاح الثابت إن وُجد، وإلا نعود لمفتاح التصحيح.
+            signingConfig = if (file("injazi-test-signing.p12").exists()) {
+                signingConfigs.getByName("injazi")
+            } else {
+                signingConfigs.getByName("debug")
+            }
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
 }
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+    // نافذة التعرّف على الوجه/البصمة لعرض تفاصيل المنبّه بعد التحقّق.
+    implementation("androidx.biometric:biometric:1.1.0")
 }
