@@ -6,6 +6,7 @@ import '../../core/models/subtask.dart';
 import '../../core/models/task.dart';
 import '../../core/utils/dates.dart';
 import '../app_scope.dart';
+import '../widgets/amount_sheet.dart';
 import '../widgets/common.dart';
 import '../widgets/pickers.dart';
 import 'focus_screen.dart';
@@ -19,6 +20,13 @@ Future<void> showTaskDetailsSheet(BuildContext context, String taskId) {
     isScrollControlled: true,
     builder: (BuildContext context) => TaskDetailsSheet(taskId: taskId),
   );
+}
+
+/// نصّ كمّية بلا أصفار زائدة (٦٠ لا ٦٠٫٠).
+String _amountText(BuildContext context, double value) {
+  final String text =
+      value == value.roundToDouble() ? value.round().toString() : value.toStringAsFixed(1);
+  return context.numStr(text);
 }
 
 class TaskDetailsSheet extends StatelessWidget {
@@ -129,6 +137,59 @@ class TaskDetailsSheet extends StatelessWidget {
                       ),
                     ),
                     const Icon(Icons.chevron_left_rounded, size: 20),
+                  ],
+                ),
+              ),
+            ],
+            if (task.hasAmount && plan != null) ...<Widget>[
+              const SizedBox(height: 14),
+              AppCard(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Row(
+                      children: <Widget>[
+                        Icon(Icons.auto_graph_rounded, size: 17, color: catColor),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            context.tr('quant.logged'),
+                            style: Theme.of(context).textTheme.labelMedium,
+                          ),
+                        ),
+                        Text(
+                          context.tr('quant.valueUnit', <String, String>{
+                            'v': _amountText(context, task.amountDone ?? 0),
+                            'unit': task.amountUnit,
+                          }).trim(),
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    AmountBar(
+                      done: task.amountDone ?? 0,
+                      target: task.amountTarget ?? 0,
+                      unit: task.amountUnit,
+                      color: catColor,
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: () => showPlanAmountSheet(
+                              context,
+                              planId: plan.id,
+                              day: task.date,
+                            ),
+                            icon: const Icon(Icons.edit_note_rounded, size: 18),
+                            label: Text(context.tr('quant.log')),
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),

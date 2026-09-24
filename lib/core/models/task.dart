@@ -22,6 +22,9 @@ class Task {
     this.done = false,
     this.completedAt,
     this.skipped = false,
+    this.amountTarget,
+    this.amountDone,
+    this.amountUnit = '',
     DateTime? createdAt,
     DateTime? updatedAt,
   })  : reminderLeads = reminderLeads ?? <int>[],
@@ -69,6 +72,9 @@ class Task {
       done: json['dn'] == true,
       completedAt: json['ca'] != null ? DateTime.tryParse(json['ca'].toString()) : null,
       skipped: json['sk'] == true,
+      amountTarget: (json['atg'] as num?)?.toDouble(),
+      amountDone: (json['adn'] as num?)?.toDouble(),
+      amountUnit: (json['adu'] ?? '').toString(),
       createdAt: json['cr'] != null ? DateTime.tryParse(json['cr'].toString()) : null,
       updatedAt: json['up'] != null ? DateTime.tryParse(json['up'].toString()) : null,
     );
@@ -107,6 +113,20 @@ class Task {
   DateTime? completedAt;
   bool skipped;
 
+  /// خطة كمّية: المطلوب لهذا اليوم، وما أُنجز فعلًا، ووحدة القياس.
+  double? amountTarget;
+  double? amountDone;
+  String amountUnit;
+
+  /// هل هذه مهمة يوم من خطة كمّية (لها كمّية مطلوبة)؟
+  bool get hasAmount => amountTarget != null && amountTarget! > 0;
+
+  /// نسبة ما أُنجز من مطلوب اليوم (0..1).
+  double get amountRatio {
+    if (!hasAmount) return 0;
+    return ((amountDone ?? 0) / amountTarget!).clamp(0.0, 1.0);
+  }
+
   final DateTime createdAt;
   DateTime updatedAt;
 
@@ -125,6 +145,7 @@ class Task {
 
   double get progress {
     if (done) return 1;
+    if (hasAmount) return amountRatio;
     if (subtasks.isEmpty) return 0;
     return subtaskDone / subtasks.length;
   }
@@ -187,6 +208,10 @@ class Task {
     bool? done,
     DateTime? completedAt,
     bool? skipped,
+    double? amountTarget,
+    bool clearAmountTarget = false,
+    double? amountDone,
+    String? amountUnit,
   }) =>
       Task(
         id: id,
@@ -205,6 +230,9 @@ class Task {
         done: done ?? this.done,
         completedAt: completedAt ?? this.completedAt,
         skipped: skipped ?? this.skipped,
+        amountTarget: clearAmountTarget ? null : (amountTarget ?? this.amountTarget),
+        amountDone: amountDone ?? this.amountDone,
+        amountUnit: amountUnit ?? this.amountUnit,
         createdAt: createdAt,
         updatedAt: DateTime.now(),
       );
@@ -242,6 +270,9 @@ class Task {
         'dn': done,
         'ca': completedAt?.toIso8601String(),
         'sk': skipped,
+        'atg': amountTarget,
+        'adn': amountDone,
+        'adu': amountUnit,
         'cr': createdAt.toIso8601String(),
         'up': updatedAt.toIso8601String(),
       };

@@ -5,6 +5,7 @@ import '../../core/l10n/app_strings.dart';
 import '../../core/l10n/date_names.dart';
 import '../../core/models/plan.dart';
 import '../../core/models/stats.dart';
+import '../../core/utils/dates.dart';
 import '../app_scope.dart';
 import '../widgets/common.dart';
 import 'plan_details_screen.dart';
@@ -97,8 +98,11 @@ class PlanCard extends StatelessWidget {
     final PlanStats stats = app.planStats(plan);
     final Color color = app.categoryColor(plan.categoryId);
     final PlanStatus status = plan.statusAt(DateTime.now());
-    final double progress =
-        stats.scheduledTotal == 0 ? 0 : (stats.doneCount / stats.scheduledTotal).clamp(0.0, 1.0);
+    // الخطة الكمّية: التقدّم بالكمّية المنجزة لا بعدد الأيام.
+    final double progress = plan.isQuantified
+        ? plan.amountRatio
+        : (stats.scheduledTotal == 0 ? 0 : (stats.doneCount / stats.scheduledTotal).clamp(0.0, 1.0));
+    final double requiredToday = plan.isQuantified ? plan.requiredOn(Dates.today()) : 0;
 
     return AppCard(
       onTap: () => Navigator.of(context).push(
@@ -161,6 +165,33 @@ class PlanCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
+          if (plan.isQuantified) ...<Widget>[
+            Wrap(
+              spacing: 14,
+              runSpacing: 6,
+              children: <Widget>[
+                _fact(
+                  context,
+                  Icons.auto_graph_rounded,
+                  context.tr('quant.doneAmount'),
+                  context.tr('quant.ofPair', <String, String>{
+                    'done': _amountText(context, plan.doneAmount),
+                    'total': _amountText(context, plan.totalTarget),
+                    'unit': plan.unit,
+                  }).trim(),
+                ),
+                _fact(
+                  context,
+                  Icons.today_rounded,
+                  context.tr('quant.todayRequired'),
+                  context.tr('quant.valueUnit', <String, String>{
+                    'v': _amountText(context, requiredToday),
+                    'unit': plan.unit,
+                  }).trim(),
+                ),
+              ],
+            ),
+          ] else
           Wrap(
             spacing: 14,
             runSpacing: 6,
@@ -214,8 +245,16 @@ class PlanCard extends StatelessWidget {
 
 }
 
+/// نصّ كمّية بلا أصفار زائدة (٦٠ لا ٦٠٫٠).
+String _amountText(BuildContext context, double value) {
+  final String text =
+      value == value.roundToDouble() ? value.round().toString() : value.toStringAsFixed(1);
+  return context.numStr(text);
+}
+
 /// وصف نصي لتكرار الخطة (يُستخدم في أكثر من شاشة).
 String planRepeatText(BuildContext context, Plan plan) {
+  if (plan.isQuantified) return context.tr('quant.repeatAll');
   switch (plan.repeatType) {
     case RepeatType.daily:
       return context.tr('repeat.daily');

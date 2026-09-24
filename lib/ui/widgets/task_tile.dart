@@ -6,8 +6,16 @@ import '../../core/models/task.dart';
 import '../../core/utils/dates.dart';
 import '../app_scope.dart';
 import '../screens/task_details_sheet.dart';
+import 'amount_sheet.dart';
 import '../screens/task_editor_screen.dart';
 import 'common.dart';
+
+/// نصّ كمّية بلا أصفار زائدة (٦٠ لا ٦٠٫٠).
+String _amountText(BuildContext context, double value) {
+  final String text =
+      value == value.roundToDouble() ? value.round().toString() : value.toStringAsFixed(1);
+  return context.numStr(text);
+}
 
 /// صف مهمة: تحديد الإنجاز، التفاصيل، والإجراءات السريعة.
 class TaskTile extends StatelessWidget {
@@ -162,6 +170,18 @@ class TaskTile extends StatelessWidget {
                       ),
                     if (showPlan && task.fromPlan)
                       _meta(context, Icons.repeat_rounded, context.tr('plan.title'), const Color(0xFF9C4DCC), dense: true),
+                    if (task.hasAmount)
+                      _meta(
+                        context,
+                        Icons.auto_graph_rounded,
+                        context.tr('quant.ofPair', <String, String>{
+                          'done': _amountText(context, task.amountDone ?? 0),
+                          'total': _amountText(context, task.amountTarget ?? 0),
+                          'unit': task.amountUnit,
+                        }).trim(),
+                        const Color(0xFF2FA86A),
+                        dense: true,
+                      ),
                     if (state == ItemState.missed)
                       _meta(context, Icons.error_outline_rounded, context.tr('task.overdue'), const Color(0xFFE05B5B), dense: true),
                     if (isSkipped)
@@ -174,10 +194,36 @@ class TaskTile extends StatelessWidget {
                   const SizedBox(height: 8),
                   ThinProgress(value: task.progress, color: catColor, height: 5),
                 ],
+                if (!dense && task.hasAmount) ...<Widget>[
+                  const SizedBox(height: 8),
+                  AmountBar(
+                    done: task.amountDone ?? 0,
+                    target: task.amountTarget ?? 0,
+                    unit: task.amountUnit,
+                    color: catColor,
+                    height: 5,
+                  ),
+                ],
               ],
             ),
           ),
-          _menu(context),
+          Column(
+            children: <Widget>[
+              if (task.hasAmount && !isDone)
+                IconButton(
+                  key: ValueKey<String>('tile_amount_${task.id}'),
+                  onPressed: () => showPlanAmountSheet(
+                    context,
+                    planId: task.planId ?? '',
+                    day: task.date,
+                  ),
+                  icon: const Icon(Icons.add_circle_outline_rounded, size: 20),
+                  tooltip: context.tr('quant.log'),
+                  visualDensity: VisualDensity.compact,
+                ),
+              _menu(context),
+            ],
+          ),
         ],
       ),
     );
@@ -226,6 +272,12 @@ class TaskTile extends StatelessWidget {
           case 'tomorrow':
             await context.appRead.moveTaskToTomorrow(task.id);
             if (context.mounted) _snack(context, context.tr('toast.taskMoved'));
+          case 'amount':
+            await showPlanAmountSheet(
+              context,
+              planId: task.planId ?? '',
+              day: task.date,
+            );
           case 'snooze':
             await context.appRead.snoozeTask(task.id);
             if (context.mounted) {
@@ -243,6 +295,11 @@ class TaskTile extends StatelessWidget {
       itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
         PopupMenuItem<String>(value: 'done', child: _menuItem(context, task.done ? 'task.markUndone' : 'task.markDone', Icons.check_circle_outline_rounded)),
         PopupMenuItem<String>(value: 'edit', child: _menuItem(context, 'common.edit', Icons.edit_rounded)),
+        if (task.hasAmount)
+          PopupMenuItem<String>(
+            value: 'amount',
+            child: _menuItem(context, 'quant.log', Icons.auto_graph_rounded),
+          ),
         PopupMenuItem<String>(value: 'snooze', child: _menuItem(context, 'task.snooze', Icons.snooze_rounded)),
         PopupMenuItem<String>(value: 'tomorrow', child: _menuItem(context, 'task.moveTomorrow', Icons.event_repeat_rounded)),
         PopupMenuItem<String>(value: 'duplicate', child: _menuItem(context, 'task.duplicate', Icons.copy_all_rounded)),

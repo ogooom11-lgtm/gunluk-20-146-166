@@ -280,20 +280,32 @@ void main() {
       app.dispose();
     });
 
-    testWidgets('زر «نسيت كلمة المرور؟» ظاهر تحت اللوحة', (WidgetTester tester) async {
+    testWidgets('لا يوجد زر «نسيت كلمة المرور» في صفحة البداية', (WidgetTester tester) async {
       final AppState app = await _lockedApp();
 
       await _pumpLock(tester, app);
 
-      expect(find.byKey(const ValueKey<String>('pin_forgot')), findsOneWidget);
-      expect(find.text('نسيت كلمة المرور؟'), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('pin_forgot')), findsNothing);
+      expect(find.textContaining('نسيت كلمة المرور'), findsNothing);
+      // اللوحة وبقية العناصر كما هي.
+      expect(find.byKey(const ValueKey<String>('pin_key_1')), findsOneWidget);
 
-      // يفتح حوار النسخة الاحتياطية أولًا (لا حذف مباشر).
-      await tester.ensureVisible(find.byKey(const ValueKey<String>('pin_forgot')));
-      await tester.tap(find.byKey(const ValueKey<String>('pin_forgot')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
-      expect(find.textContaining('لا تُحذف بياناتك'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      app.dispose();
+    });
+
+    testWidgets('لوحة الرمز تبقى بلا زر نسيت في وضع الكيبورد أيضًا',
+        (WidgetTester tester) async {
+      final AppState app = await _lockedApp();
+
+      await _pumpLock(tester, app);
+      await tester.ensureVisible(find.text('كيبورد الجهاز'));
+      await tester.tap(find.text('كيبورد الجهاز'));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.byKey(const ValueKey<String>('pin_forgot')), findsNothing);
+      expect(find.byKey(const ValueKey<String>('pin_keyboard_field')), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       app.dispose();

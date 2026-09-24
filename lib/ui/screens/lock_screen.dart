@@ -9,7 +9,6 @@ import '../../theme/app_theme.dart';
 import '../app_scope.dart';
 import '../widgets/pin_pad.dart';
 import '../widgets/pickers.dart';
-import '../widgets/progress_ring.dart';
 
 /// شاشة القفل: لوحة أرقام مخصّصة + نقاط متحرّكة + فتح تلقائي اختياري.
 ///
@@ -41,7 +40,6 @@ class _LockScreenState extends State<LockScreen> with SingleTickerProviderStateM
   final FocusNode _kbFocus = FocusNode();
 
   /// جارٍ تجهيز النسخة الاحتياطية قبل البدء من جديد.
-  bool _savingBackup = false;
 
   /// حركة دخول الشاشة.
   late final AnimationController _enter = AnimationController(
@@ -232,77 +230,6 @@ class _LockScreenState extends State<LockScreen> with SingleTickerProviderStateM
     HapticFeedback.heavyImpact();
   }
 
-  /// «نسيت كلمة المرور»: نحفظ نسخة مشفّرة في المسار الذي يختاره المستخدم
-  /// أولًا — ثم يبدأ التطبيق من جديد. لا يُحذف شيء إن لم تُحفظ النسخة.
-  Future<void> _forgot() async {
-    final bool go = await showConfirmDialog(
-      context,
-      title: context.tr('security.forgot'),
-      message: context.tr('security.backupFirstDesc'),
-      confirmLabel: context.tr('security.backupThenReset'),
-      danger: false,
-    );
-    if (!go || !mounted) return;
-
-    // كلمة سر النسخة: يختارها المستخدم الآن ويتذكّرها لاستعادتها لاحقًا.
-    final String? password = await showPasswordDialog(
-      context,
-      title: context.tr('backup.passwordPrompt'),
-      fieldLabel: context.tr('backup.passwordPrompt'),
-      confirm: true,
-      hint: context.tr('backup.passwordPromptDesc'),
-      submitLabel: context.tr('security.backupThenReset'),
-      minLength: 6,
-      shortMessage: context.tr('backup.passwordShort'),
-    );
-    if (password == null || !mounted) return;
-
-    final app = context.appRead;
-    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
-    setState(() => _savingBackup = true);
-
-    // ١) التشفير
-    final String? encrypted = await app.exportEncryptedJson(password);
-    if (!mounted) return;
-    if (encrypted == null) {
-      setState(() => _savingBackup = false);
-      _toastMessage(context.tr('security.backupFailedNoReset'), error: true);
-      return;
-    }
-
-    // ٢) الحفظ في المسار الذي يختاره المستخدم
-    final String saved = await app.files.saveTextFile(
-      fileName: 'injazi-backup-${_stamp()}.injaz',
-      text: encrypted,
-    ) ??
-        '';
-    if (!mounted) return;
-    setState(() => _savingBackup = false);
-    if (saved.isEmpty || saved == 'error') {
-      // لا نسخة ⇒ لا حذف: تبقى البيانات كما هي.
-      _toastMessage(context.tr('security.backupFailedNoReset'), error: true);
-      return;
-    }
-
-    await app.updateSettings(app.settings.copyWith(lastExport: DateTime.now()));
-
-    // ٣) البدء من جديد بعد نجاح الحفظ فقط
-    await app.resetAll();
-    if (!mounted) return;
-    messenger.showSnackBar(
-      SnackBar(
-        duration: const Duration(seconds: 6),
-        content: Text(context.tr('security.backupSavedStartFresh', <String, String>{'name': saved})),
-      ),
-    );
-  }
-
-  String _stamp() {
-    final DateTime now = DateTime.now();
-    String two(int v) => v.toString().padLeft(2, '0');
-    return '${now.year}${two(now.month)}${two(now.day)}-${two(now.hour)}${two(now.minute)}';
-  }
-
   void _toastMessage(String message, {bool error = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -321,26 +248,6 @@ class _LockScreenState extends State<LockScreen> with SingleTickerProviderStateM
     final int remainingAttempts = 3 - (_attempts % 3);
     // حجم الأزرار: أكبر ما يمكن مع بقاء كل شيء داخل الشاشة بلا تمرير.
     final double keySize = _keySizeFor(context);
-
-    // أثناء تجهيز النسخة الاحتياطية قبل البدء من جديد.
-    if (_savingBackup) {
-      return Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              const SizedBox(
-                width: 42,
-                height: 42,
-                child: CircularProgressIndicator(strokeWidth: 3),
-              ),
-              const SizedBox(height: 16),
-              Text(context.tr('security.backupInProgress')),
-            ],
-          ),
-        ),
-      );
-    }
 
     return Scaffold(
       body: Container(
@@ -553,14 +460,7 @@ class _LockScreenState extends State<LockScreen> with SingleTickerProviderStateM
             ),
           ],
         ),
-        // زر واضح لنسيان كلمة المرور في سطر مستقل (يعمل في وضعي اللوحة والكيبورد).
         const SizedBox(height: 6),
-        OutlinedButton.icon(
-          key: const ValueKey<String>('pin_forgot'),
-          onPressed: _busy ? null : _forgot,
-          icon: const Icon(Icons.help_outline_rounded, size: 18),
-          label: Text(context.tr('security.pinForgot')),
-        ),
         Text(
           context.tr('security.pinLockedTip'),
           style: Theme.of(context).textTheme.labelSmall,

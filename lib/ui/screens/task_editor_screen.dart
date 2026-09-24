@@ -66,6 +66,13 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
   DateTime? _endDate;
   bool _paused = false;
 
+  // حقول الخطة الكمّية (هدف يُوزَّع على الأيام)
+  bool _quantified = false;
+  final TextEditingController _target = TextEditingController();
+  final TextEditingController _unit = TextEditingController();
+  Set<int> _restWeekdays = <int>{};
+  bool _autoComplete = true;
+
   Task? _existingTask;
   Plan? _existingPlan;
 
@@ -114,6 +121,15 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
         _subtasks.addAll(plan.subtaskTemplates.map((Subtask s) => s.copy()));
         _tags.addAll(plan.tags);
         _paused = plan.paused;
+        _quantified = plan.isQuantified;
+        _unit.text = plan.unit;
+        _restWeekdays = Set<int>.from(plan.restWeekdays);
+        _autoComplete = plan.autoComplete;
+        if (plan.target != null) {
+          _target.text = plan.target == plan.target!.roundToDouble()
+              ? plan.target!.round().toString()
+              : plan.target!.toString();
+        }
       }
     } else if (widget.draft != null) {
       final Task draft = widget.draft!;
@@ -142,7 +158,15 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
     _notes.dispose();
     _subtask.dispose();
     _tag.dispose();
+    _target.dispose();
+    _unit.dispose();
     super.dispose();
+  }
+
+  /// الهدف الكلي كما كتبه المستخدم (0 = غير محدّد).
+  double get _targetValue {
+    final double? parsed = double.tryParse(_target.text.trim().replaceAll(',', '.'));
+    return parsed == null || parsed < 0 ? 0 : parsed;
   }
 
   bool get _isEditing => _existingTask != null || _existingPlan != null;
@@ -217,6 +241,9 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
               onChanged: (TaskPriority value) => setState(() => _priority = value),
             ),
             const SizedBox(height: 18),
+            _sectionTitle(context, context.tr('quant.title'), Icons.auto_graph_rounded),
+            _quantSection(context),
+            const SizedBox(height: 18),
             _sectionTitle(context, context.tr('plan.repeatType'), Icons.repeat_rounded),
             _repeatSection(context),
             const SizedBox(height: 18),
@@ -268,6 +295,12 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
         ],
       ),
     );
+  }
+
+  void _toast(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   Widget _typeSelector(BuildContext context) {
@@ -672,6 +705,223 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
     );
   }
 
+  /// قسم الخطة الكمّية: هدف كلي + مدة + أيام راحة ⇒ التطبيق يوزّع المطلوب.
+  Widget _quantSection(BuildContext context) {
+    final Plan preview = _buildPlan(id: _existingPlan?.id ?? 'preview');
+    final List<PlanDayAmount> days = preview.isQuantified
+        ? preview.schedule(from: _date, maxDays: 7)
+        : const <PlanDayAmount>[];
+    final int execDays = preview.isQuantified
+        ? preview.executionDays(_date, _endDate ?? _date)
+        : 0;
+    final double perDay = execDays <= 0 ? 0 : _targetValue / execDays;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        SettingsSwitchTile(
+          title: context.tr('quant.enabled'),
+          subtitle: context.tr('quant.enabledDesc'),
+          icon: Icons.auto_graph_rounded,
+          value: _quantified,
+          onChanged: (bool value) => setState(() {
+            _quantified = value;
+            if (value && _endDate == null) {
+              // افتراضيًا: أسبوع من اليوم — يمكن تعديله.
+              _endDate = Dates.addDays(_date, 6);
+            }
+          }),
+        ),
+        if (_quantified) ...<Widget>[
+          const SizedBox(height: 12),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: TextField(
+                  key: const ValueKey<String>('quant_target_field'),
+                  controller: _target,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    labelText: context.tr('quant.total'),
+                    hintText: context.tr('quant.totalHint'),
+                    prefixIcon: const Icon(Icons.flag_outlined),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextField(
+                  key: const ValueKey<String>('quant_unit_field'),
+                  controller: _unit,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    labelText: context.tr('quant.unit'),
+                    hintText: context.tr('quant.unitHint'),
+                    prefixIcon: const Icon(Icons.straighten_rounded),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: <Widget>[
+              for (final String key in <String>[
+                'quant.unitPage',
+                'quant.unitWord',
+                'quant.unitAyah',
+                'quant.unitExercise',
+                'quant.unitLesson',
+                'quant.unitMinute',
+              ])
+                GestureDetector(
+                  onTap: () => setState(() => _unit.text = context.tr(key)),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: _unit.text.trim() == context.tr(key)
+                          ? context.palette.seed
+                          : context.palette.seed.withAlpha(context.isDark ? 30 : 16),
+                      borderRadius: BorderRadius.circular(12 * context.st.radiusScale),
+                    ),
+                    child: Text(
+                      context.tr(key),
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: _unit.text.trim() == context.tr(key)
+                                ? Colors.white
+                                : context.palette.seed,
+                          ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text(context.tr('quant.restDays'), style: Theme.of(context).textTheme.labelMedium),
+          const SizedBox(height: 4),
+          Text(context.tr('quant.restDaysHint'), style: Theme.of(context).textTheme.labelSmall),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: <Widget>[
+              for (final int weekday in <int>[
+                DateTime.saturday,
+                DateTime.sunday,
+                DateTime.monday,
+                DateTime.tuesday,
+                DateTime.wednesday,
+                DateTime.thursday,
+                DateTime.friday,
+              ])
+                GestureDetector(
+                  onTap: () => setState(() {
+                    if (_restWeekdays.contains(weekday)) {
+                      _restWeekdays.remove(weekday);
+                    } else {
+                      _restWeekdays.add(weekday);
+                    }
+                  }),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: _restWeekdays.contains(weekday)
+                          ? const Color(0xFF3E8FD8)
+                          : context.palette.seed.withAlpha(context.isDark ? 24 : 12),
+                      borderRadius: BorderRadius.circular(12 * context.st.radiusScale),
+                    ),
+                    child: Text(
+                      DateNames.weekday(
+                        Dates.addDays(DateTime(2024, 1, 1), weekday - 1),
+                        context.langCode,
+                      ),
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: _restWeekdays.contains(weekday) ? Colors.white : null,
+                          ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SettingsSwitchTile(
+            title: context.tr('quant.autoComplete'),
+            icon: Icons.task_alt_rounded,
+            value: _autoComplete,
+            onChanged: (bool value) => setState(() => _autoComplete = value),
+          ),
+          const SizedBox(height: 12),
+          if (execDays <= 0 || _endDate == null)
+            Text(context.tr('quant.needEnd'), style: Theme.of(context).textTheme.bodySmall)
+          else
+            AppCard(
+              padding: const EdgeInsets.all(14),
+              color: context.palette.seed.withAlpha(context.isDark ? 32 : 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      Icon(Icons.insights_rounded, size: 18, color: context.palette.seed),
+                      const SizedBox(width: 8),
+                      Text(context.tr('quant.preview'), style: Theme.of(context).textTheme.titleSmall),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  _previewRow(
+                    context,
+                    'quant.execDays',
+                    context.numStr(execDays),
+                  ),
+                  _previewRow(
+                    context,
+                    'quant.perDay',
+                    context.tr('quant.valueUnit', <String, String>{
+                      'v': _amountText(context, _roundPerDay(preview, perDay)),
+                      'unit': _unit.text.trim(),
+                    }),
+                  ),
+                  const SizedBox(height: 8),
+                  for (final PlanDayAmount item in days)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Row(
+                        children: <Widget>[
+                          Expanded(
+                            child: Text(
+                              context.dateStr(item.day),
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ),
+                          Text(
+                            context.tr('quant.valueUnit', <String, String>{
+                              'v': _amountText(context, item.amount),
+                              'unit': _unit.text.trim(),
+                            }),
+                            style: Theme.of(context).textTheme.labelLarge,
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+        ],
+      ],
+    );
+  }
+
+  static double _roundPerDay(Plan plan, double value) => plan.roundAmount(value);
+
+  static String _amountText(BuildContext context, double value) {
+    final String text =
+        value == value.roundToDouble() ? value.round().toString() : value.toStringAsFixed(1);
+    return context.numStr(text);
+  }
+
   Widget _planPreview(BuildContext context) {
     final app = context.app;
     final Plan preview = _buildPlan(id: _existingPlan?.id ?? 'preview');
@@ -868,6 +1118,11 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
         subtaskTemplates: _subtasks.map((Subtask s) => Subtask.create(s.title)).toList(),
         tags: List<String>.from(_tags),
         skippedDates: _existingPlan?.skippedDates ?? <String>{},
+        target: _isPlan && _quantified && _targetValue > 0 ? _targetValue : null,
+        unit: _isPlan && _quantified ? _unit.text.trim() : '',
+        progress: _existingPlan?.progress ?? <String, double>{},
+        restWeekdays: _isPlan && _quantified ? _restWeekdays : <int>{},
+        autoComplete: _autoComplete,
         createdAt: _existingPlan?.createdAt,
       );
 
@@ -889,6 +1144,18 @@ class _TaskEditorScreenState extends State<TaskEditorScreen> {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(content: Text(context.tr('toast.endBeforeStart'))));
+      return;
+    }
+    if (_isPlan && _quantified && _targetValue <= 0) {
+      _toast(context.tr('quant.needTotal'));
+      return;
+    }
+    if (_isPlan && _quantified && _endDate == null) {
+      _toast(context.tr('quant.needEnd'));
+      return;
+    }
+    if (_isPlan && _quantified && _unit.text.trim().isEmpty) {
+      _toast(context.tr('quant.needUnit'));
       return;
     }
     final app = context.appRead;

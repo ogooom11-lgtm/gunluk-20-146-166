@@ -26,6 +26,10 @@ import 'app_repository.dart';
 import 'defaults.dart';
 import 'reminder_planner.dart';
 
+/// ترميز بيانات التطبيق إلى نص JSON — تُنفَّذ في عزلة منفصلة (compute)
+/// كي لا تتجمّد الواجهة عند حفظ أرشيف كبير.
+String encodeDataTask(Map<String, dynamic> data) => jsonEncode(data);
+
 /// حالة التطبيق المركزية: البيانات، الإحصاءات، الإشعارات، والتعديلات.
 class AppState extends ChangeNotifier {
   AppState({
@@ -194,11 +198,14 @@ class AppState extends ChangeNotifier {
     _load();
     await repo.reload();
     await applyPendingOps(silent: true);
+    syncQuantProgress();
     _prune();
     // التأكد من وجود نسخ الخطط القادمة (والنسخة الحالية) — بدونها لا تظهر
     // مهام الخطط في التقويم ولا تُجدول تذكيراتها بعد إعادة التشغيل.
     final int healed = ensureOccurrences(pastDays: 0);
     if (healed > 0) _dirty = true;
+    // إعادة حساب مطلوب الأيام القادمة للخطط الكمّية عند كل فتح للتطبيق.
+    refreshQuantTasks();
     // قفل التطبيق عند الإقلاع إن كان مفعّلًا.
     locked = settings.lockEnabled && settings.lockHash.isNotEmpty;
     ready = true;
@@ -334,23 +341,54 @@ class AppState extends ChangeNotifier {
     sessions.removeWhere((FocusSession s) => Dates.diffDays(cutoff, s.start) < 0);
   }
 
-  void _save() {
-    _dirty = false;
-    repo.write(exportData());
+  /// حفظ واحد جارٍ (حتى لا يتزاحم حزمان على نفس المستند).
+  Future<void>? _saving;
+
+  /// يحفظ كل البيانات — وترميز JSON يجري في عزلة منفصلة كي لا تتجمّد الواجهة
+  /// عند كبر البيانات (آلاف المهام والأيام).
+  ///
+  /// إن كان حفظ جارٍ فلا نبدأ آخر بالتوازي (كي لا يطمس الأقدم الجديد)، بل
+  /// نُعيد الحفظ الجاري نفسه — وهو يُكمل ما استجدّ من تغييرات في حلقة واحدة.
+  Future<void> _save() {
+    final Future<void>? running = _saving;
+    if (running != null) return running;
+    // لا تغييرات ⇒ لا كتابة (وإلّا بقي _saving عالقًا على مهمة منتهية).
+    if (!_dirty) return Future<void>.value();
+    final Future<void> job = _saveLoop();
+    _saving = job;
+    return job;
+  }
+
+  Future<void> _saveLoop() async {
+    try {
+      while (_dirty) {
+        _dirty = false;
+        final Map<String, dynamic> data = exportData();
+        final String raw =
+            useIsolates ? await compute(encodeDataTask, data) : encodeDataTask(data);
+        await repo.ensure();
+        await repo.writeRaw(raw);
+      }
+    } catch (_) {
+      // فشل الحفظ: نُعيد علامة «غير محفوظ» كي يُعاد المحاولة تلقائيًا.
+      _dirty = true;
+    } finally {
+      _saving = null;
+    }
   }
 
   void markDirty({bool notify = true}) {
     _dirty = true;
     _saveTimer?.cancel();
-    _saveTimer = Timer(const Duration(milliseconds: 350), () {
-      if (_dirty) _save();
+    _saveTimer = Timer(const Duration(milliseconds: 700), () {
+      if (_dirty) unawaited(_save());
     });
     if (notify) notifyListeners();
   }
 
   Future<void> flush() async {
     _saveTimer?.cancel();
-    if (_dirty) _save();
+    await _save();
   }
 
   // ===== فئات =====
@@ -585,6 +623,7 @@ class AppState extends ChangeNotifier {
       plans.add(plan);
     }
     if (regenerate) _resyncPlan(plan);
+    refreshQuantTasks(onlyPlan: plan);
     markDirty();
     _scheduleReminderRebuild();
   }
@@ -620,9 +659,85 @@ class AppState extends ChangeNotifier {
       tasks.removeWhere((Task t) => Dates.sameDay(t.date, day) && t.planId == planId && !t.done);
     }
     ensureOccurrences();
+    refreshQuantTasks(onlyPlan: plan);
     markDirty();
     _scheduleReminderRebuild();
   }
+
+  // ===== الخطة الكمّية (هدف يُوزَّع على الأيام) =====
+
+  /// يسجّل كمّية يوم من خطة كمّية، ثم يعيد توزيع الأيام القادمة:
+  /// أنجزت أكثر من المطلوب ⇒ يقلّ مطلوب الأيام القادمة، وأقل ⇒ يرتفع.
+  Future<void> logPlanAmount(String planId, DateTime day, double amount) async {
+    final Plan? plan = planById(planId);
+    if (plan == null || !plan.isQuantified) return;
+    // المطلوب قبل التسجيل — نُقارن به لتحديد الإنجاز.
+    final double required = plan.requiredOn(day);
+    final String key = Dates.key(day);
+    final double clean = amount <= 0 ? 0 : (amount * 100).roundToDouble() / 100;
+    if (clean <= 0) {
+      plan.progress.remove(key);
+    } else {
+      plan.progress[key] = clean;
+    }
+    final Task? task = taskFor(planId, day);
+    if (task != null) {
+      task.amountDone = clean;
+      task.amountUnit = plan.unit;
+      if (plan.autoComplete) {
+        final bool met = required > 0 && clean + 0.0001 >= required;
+        if (met && !task.done) {
+          task.done = true;
+          task.completedAt = DateTime.now();
+          for (final Subtask sub in task.subtasks) {
+            sub.done = true;
+          }
+        }
+      }
+    }
+    refreshQuantTasks(onlyPlan: plan);
+    markDirty();
+    _scheduleReminderRebuild();
+  }
+
+  /// يتأكد أن كمّية كل خطة كمّية محفوظة في سجلّ الخطة (استعادة بعد نسخة قديمة).
+  void syncQuantProgress() {
+    for (final Plan plan in plans) {
+      if (!plan.isQuantified) continue;
+      for (final Task task in tasks) {
+        if (task.planId != plan.id || !task.done) continue;
+        final double? done = task.amountDone;
+        if (done == null || done <= 0) continue;
+        final String key = Dates.key(task.date);
+        final double saved = plan.progress[key] ?? 0;
+        if (done > saved) plan.progress[key] = done;
+      }
+    }
+  }
+
+  /// يحدّث مطلوب الأيام القادمة (واليوم) في مهام الخطة الكمّية.
+  void refreshQuantTasks({Plan? onlyPlan}) {
+    // نعتمد ساعة التطبيق (قابلة للحقن في الاختبارات) لا تاريخ النظام مباشرة.
+    final DateTime today = Dates.day(clock());
+    for (final Plan plan in (onlyPlan != null ? <Plan>[onlyPlan] : plans)) {
+      if (!plan.isQuantified) continue;
+      // فهرس مهام الخطة حسب اليوم: البحث الخطّي لكل يوم كان يُثقل الواجهة.
+      final Map<String, Task> byDay = <String, Task>{};
+      for (final Task task in tasks) {
+        if (task.planId == plan.id) byDay[Dates.key(task.date)] = task;
+      }
+      for (final PlanDayAmount item in plan.schedule(from: today, maxDays: 400)) {
+        final Task? task = byDay[Dates.key(item.day)];
+        if (task == null || task.done) continue;
+        task.amountTarget = item.amount;
+        task.amountDone = item.done;
+        task.amountUnit = plan.unit;
+      }
+    }
+  }
+
+  /// مطلوب اليوم لخطة كمّية (0 إن لم تكن كمّية أو انتهت).
+  double planRequiredToday(Plan plan) => plan.requiredOn(Dates.day(clock()));
 
   /// إعادة توليد مهام الخطة في المستقبل (بعد تعديل قواعدها).
   void _resyncPlan(Plan plan) {
@@ -639,6 +754,9 @@ class AppState extends ChangeNotifier {
     final DateTime from = Dates.addDays(today, -pastDays);
     final DateTime to = Dates.addDays(today, futureDays);
     int added = 0;
+    // فهرس المعرّفات مرّة واحدة: كان الفحص لكل يوم يمرّ على كل المهام،
+    // ومع آلاف المهام كان يسبّب تجمّدًا عند فتح التطبيق.
+    final Set<String> existing = taskIds;
     for (final Plan plan in (onlyPlan != null ? <Plan>[onlyPlan] : plans)) {
       if (plan.paused) continue;
       final DateTime start = Dates.diffDays(from, plan.startDate) > 0 ? from : plan.startDate;
@@ -647,15 +765,19 @@ class AppState extends ChangeNotifier {
       final List<DateTime> days = plan.occurrences(start, end);
       for (final DateTime day in days) {
         final String id = Ids.planOccurrence(plan.id, Dates.key(day));
-        final bool exists = tasks.any((Task t) => t.id == id);
-        if (!exists) {
-          tasks.add(plan.occurrenceTask(day));
-          added++;
-        }
+        if (existing.contains(id)) continue;
+        final Task created = plan.occurrenceTask(day);
+        tasks.add(created);
+        existing.add(id);
+        added++;
       }
     }
+    if (added > 0) refreshQuantTasks();
     return added;
   }
+
+  /// فهرس سريع لمعرّفات المهام — يمنع المقارنة الخطية داخل الحلقات الطويلة.
+  Set<String> get taskIds => tasks.map((Task t) => t.id).toSet();
 
   // ===== ملاحظات وجلسات =====
 
@@ -1244,11 +1366,13 @@ class AppState extends ChangeNotifier {
   }
 
   /// يفتح المنبّه إن حان وقت مهمة عاجلة (تُستدعى دوريًا من الواجهة).
-  void checkDueAlarm() {
+  /// يعيد true إن فُتح منبّه الآن — كي لا تُعاد بناء الواجهة بلا داعٍ.
+  bool checkDueAlarm() {
     final Task? task = dueAlarmTask();
-    if (task == null) return;
+    if (task == null) return false;
     _alarmShown.add('${task.id}:${Dates.key(task.date)}:${task.startMinutes}');
     openAlarm(task.id);
+    return true;
   }
 
   /// «تجربة المنبّه»: نُظهره فورًا على مهمة عاجلة قادمة أو على أي مهمة.

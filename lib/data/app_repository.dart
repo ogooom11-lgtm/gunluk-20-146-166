@@ -35,8 +35,14 @@ class AppRepository {
   }
 
   Future<void> write(Map<String, dynamic> data) async {
+    await ensure();
+    await writeRaw(jsonEncode(data));
+  }
+
+  /// كتابة نص JSON جاهز (يُرمَّز خارج خيط الواجهة في التطبيق).
+  Future<void> writeRaw(String raw) async {
     final SharedPreferences p = await ensure();
-    await p.setString(dataKey, jsonEncode(data));
+    await p.setString(dataKey, raw);
   }
 
   /// إعادة تحميل القيم من النظام (لاستقبال العمليات التي نُفّذت من إشعار في الخلفية).

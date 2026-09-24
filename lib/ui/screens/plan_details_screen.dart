@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../../core/l10n/app_strings.dart';
+import '../../core/l10n/date_names.dart';
 import '../../core/models/plan.dart';
 import '../../core/models/stats.dart';
 import '../../core/models/task.dart';
 import '../../core/utils/dates.dart';
 import '../app_scope.dart';
+import '../widgets/amount_sheet.dart';
 import '../widgets/common.dart';
 import '../widgets/pickers.dart';
 import '../widgets/progress_ring.dart';
@@ -141,6 +143,10 @@ class PlanDetailsScreen extends StatelessWidget {
               ],
             ),
           ),
+          if (plan.isQuantified) ...<Widget>[
+            const SizedBox(height: 18),
+            _QuantCard(plan: plan, color: color),
+          ],
           const SizedBox(height: 18),
           SectionHeader(title: context.tr('plan.summary'), icon: Icons.analytics_rounded),
           _statsGrid(context, stats),
@@ -298,6 +304,241 @@ class PlanDetailsScreen extends StatelessWidget {
                 size: 26,
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/// بطاقة الخطة الكمّية: كم أنجزت من الهدف، مطلوب اليوم، وجدول الأيام القادمة.
+///
+/// المطلوب اليومي **يتعدّل تلقائيًا** حسب ما تسجّله: أنجزت أكثر ⇒ يقلّ
+/// مطلوب الأيام القادمة، أنجزت أقل ⇒ يرتفع — حتى يكتمل الهدف في تاريخه.
+class _QuantCard extends StatelessWidget {
+  const _QuantCard({required this.plan, required this.color});
+
+  final Plan plan;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final app = context.app;
+    final DateTime today = Dates.today();
+    final double required = plan.requiredOn(today);
+    final double doneToday = plan.progressOn(today);
+    final bool allDone = plan.remainingAmount <= 0;
+    final List<PlanDayAmount> schedule = plan.schedule(from: today, maxDays: 12);
+    final String unit = plan.unit;
+
+    return AppCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Icon(Icons.auto_graph_rounded, size: 19, color: color),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(context.tr('quant.overview'), style: Theme.of(context).textTheme.titleSmall),
+              ),
+              Pill(
+                label: context.tr('quant.badge'),
+                color: color,
+                dense: true,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: <Widget>[
+              Text(
+                '${formatAmount(context, plan.doneAmount)} / ${formatAmount(context, plan.totalTarget)}',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(color: color),
+              ),
+              const SizedBox(width: 6),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(unit, style: Theme.of(context).textTheme.labelMedium),
+              ),
+              const Spacer(),
+              Text(
+                '${context.numStr((plan.amountRatio * 100).round())}%',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ThinProgress(value: plan.amountRatio, color: color, height: 9),
+          const SizedBox(height: 10),
+          Text(
+            allDone
+                ? context.tr('quant.allDone')
+                : context.tr('quant.remaining', <String, String>{
+                    'v': formatAmount(context, plan.remainingAmount),
+                    'unit': unit,
+                  }),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 14),
+          if (!allDone)
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: color.withAlpha(context.isDark ? 36 : 16),
+                borderRadius: BorderRadius.circular(16 * context.st.radiusScale),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      Icon(Icons.today_rounded, size: 16, color: color),
+                      const SizedBox(width: 6),
+                      Text(context.tr('quant.todayRequired'), style: Theme.of(context).textTheme.labelMedium),
+                      const Spacer(),
+                      Text(
+                        context.tr('quant.dailyTarget', <String, String>{
+                          'v': formatAmount(context, required),
+                          'unit': unit,
+                        }),
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(color: color),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    context.tr('quant.doneToday', <String, String>{
+                      'v': formatAmount(context, doneToday),
+                      'unit': unit,
+                    }),
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
+                  const SizedBox(height: 8),
+                  AmountBar(done: doneToday, target: required, unit: unit, color: color),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: FilledButton.icon(
+                          key: const ValueKey<String>('quant_log_button'),
+                          onPressed: () => showPlanAmountSheet(context, planId: plan.id, day: today),
+                          icon: const Icon(Icons.edit_note_rounded, size: 18),
+                          label: Text(context.tr('quant.log')),
+                        ),
+                      ),
+                      if (required > 0 && doneToday + 0.0001 < required) ...<Widget>[
+                        const SizedBox(width: 8),
+                        OutlinedButton(
+                          key: const ValueKey<String>('quant_full_button'),
+                          onPressed: () => app.logPlanAmount(plan.id, today, required),
+                          child: Text(context.tr('quant.markDoneFull')),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          const SizedBox(height: 14),
+          Row(
+            children: <Widget>[
+              Icon(Icons.calendar_view_week_rounded, size: 17, color: color),
+              const SizedBox(width: 7),
+              Text(context.tr('quant.schedule'), style: Theme.of(context).textTheme.labelLarge),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(context.tr('quant.scheduleHint'), style: Theme.of(context).textTheme.labelSmall),
+          const SizedBox(height: 8),
+          if (schedule.isEmpty)
+            Text(context.tr('quant.noDays'), style: Theme.of(context).textTheme.bodySmall)
+          else
+            for (final PlanDayAmount item in schedule) ...<Widget>[
+              _quantDayRow(context, plan, item, color),
+              const SizedBox(height: 6),
+            ],
+          if (plan.restWeekdays.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: <Widget>[
+                Text(context.tr('quant.restDays'), style: Theme.of(context).textTheme.labelMedium),
+                for (final int weekday in (plan.restWeekdays.toList()..sort()))
+                  Pill(
+                    label: DateNames.weekday(
+                      Dates.addDays(DateTime(2024, 1, 1), weekday - 1),
+                      context.langCode,
+                    ),
+                    color: Colors.blueGrey,
+                    dense: true,
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _quantDayRow(BuildContext context, Plan plan, PlanDayAmount item, Color color) {
+    final bool isToday = Dates.sameDay(item.day, Dates.today());
+    final bool met = item.met;
+    final bool partial = !met && item.done > 0;
+    final String unit = plan.unit;
+    return AppCard(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      shadow: false,
+      onTap: () => showPlanAmountSheet(context, planId: plan.id, day: item.day),
+      child: Row(
+        children: <Widget>[
+          SizedBox(
+            width: 44,
+            child: Column(
+              children: <Widget>[
+                Text(context.numStr(item.day.day), style: Theme.of(context).textTheme.titleSmall),
+                Text(context.weekdayStr(item.day, short: true), style: Theme.of(context).textTheme.labelSmall),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: Text(
+                        context.tr('quant.dailyTarget', <String, String>{
+                          'v': formatAmount(context, item.amount),
+                          'unit': unit,
+                        }),
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ),
+                    if (isToday)
+                      Pill(label: context.tr('quick.today'), color: color, dense: true)
+                    else if (met)
+                      Pill(label: context.tr('quant.dayDone'), color: const Color(0xFF2FA86A), dense: true)
+                    else if (partial)
+                      Pill(label: context.tr('quant.dayPartial'), color: const Color(0xFFE0A02E), dense: true),
+                  ],
+                ),
+                const SizedBox(height: 5),
+                AmountBar(
+                  done: item.done,
+                  target: item.amount,
+                  unit: unit,
+                  color: met ? const Color(0xFF2FA86A) : color,
+                  height: 5,
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );

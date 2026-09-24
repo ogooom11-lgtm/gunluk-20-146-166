@@ -639,19 +639,18 @@ class NotificationService {
   Future<void> ensureFocusChannel(AppSettings settings, AppLocalizations l10n) async {
     final AndroidFlutterLocalNotificationsPlugin? android = _android;
     if (android == null) return;
-    try {
-      await android.createNotificationChannel(
-        AndroidNotificationChannel(
-          _focusChannelId(settings),
-          l10n.t('focus.notifChannelName'),
-          description: l10n.t('focus.notifChannelDesc'),
-          importance: Importance.low,
-          playSound: false,
-          enableVibration: false,
-          showBadge: false,
-        ),
-      );
-    } catch (_) {}
+    // محميّة بمهلة مثل بقية مناداة النظام: قناة لا تستجيب لا تُجمّد المؤقّت.
+    await _guardCall(android.createNotificationChannel(
+      AndroidNotificationChannel(
+        _focusChannelId(settings),
+        l10n.t('focus.notifChannelName'),
+        description: l10n.t('focus.notifChannelDesc'),
+        importance: Importance.low,
+        playSound: false,
+        enableVibration: false,
+        showBadge: false,
+      ),
+    ));
   }
 
   /// يعرض/يحدّث إشعار الجلسة الجارية: شريط تقدّم + الوقت المتبقي + وقت الانتهاء.

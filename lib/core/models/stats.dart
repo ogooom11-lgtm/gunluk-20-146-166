@@ -213,6 +213,12 @@ class StatsEngine {
   }) {
     final DateTime n = now ?? DateTime.now();
     final List<DayStat> days = <DayStat>[];
+    // فهرس المهام حسب اليوم مرّة واحدة: كان كل يوم يمرّ على كل المهام،
+    // فمع آلاف المهام (سنوات من الخطط) كانت التقارير تُجمّد الواجهة.
+    final Map<String, List<Task>> byDay = <String, List<Task>>{};
+    for (final Task t in allTasks) {
+      byDay.putIfAbsent(Dates.key(t.date), () => <Task>[]).add(t);
+    }
     int total = 0;
     int done = 0;
     int missed = 0;
@@ -228,8 +234,10 @@ class StatsEngine {
 
     DateTime cursor = Dates.day(from);
     final DateTime last = Dates.day(to);
-    while (Dates.diffDays(cursor, last) >= 0) {
-      final List<Task> dayTasks = allTasks.where((Task t) => Dates.sameDay(t.date, cursor)).toList();
+    int guard = 0;
+    while (Dates.diffDays(cursor, last) >= 0 && guard <= 1200) {
+      guard++;
+      final List<Task> dayTasks = byDay[Dates.key(cursor)] ?? const <Task>[];
       final DayStat stat = dayStat(cursor, dayTasks, now: n);
       days.add(stat);
       total += stat.total;

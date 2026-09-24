@@ -44,8 +44,8 @@ class _RootShellState extends State<RootShell> {
     _ticker = Timer.periodic(const Duration(seconds: 15), (_) {
       if (!mounted) return;
       // منبّه المهام العاجلة داخل التطبيق (حتى لو مُنعت الشاشة الكاملة للنظام).
-      context.appRead.checkDueAlarm();
-      setState(() {});
+      // لا نُعيد بناء الواجهة إلّا عند فتح منبّه فعليًا (توفيرًا للسلاسة).
+      if (context.appRead.checkDueAlarm()) setState(() {});
     });
   }
 
